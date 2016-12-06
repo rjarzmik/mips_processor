@@ -63,7 +63,6 @@ architecture rtl of MIPS_CPU is
   -----------------------------------------------------------------------------
   signal current_pc          : std_logic_vector(ADDR_WIDTH - 1 downto 0);
   signal next_pc             : std_logic_vector(ADDR_WIDTH - 1 downto 0);
-  signal next_next_pc        : std_logic_vector(ADDR_WIDTH - 1 downto 0);
   signal jump_target         : std_logic_vector(ADDR_WIDTH - 1 downto 0);
   signal fetched_instruction : std_logic_vector(DATA_WIDTH - 1 downto 0);
   signal fetched_pc          : std_logic_vector(DATA_WIDTH - 1 downto 0);
@@ -136,8 +135,7 @@ begin  -- architecture rtl
       jump_pc        => wb_is_jump,
       jump_target    => wb_jump_target,
       o_current_pc   => current_pc,
-      o_next_pc      => next_pc,
-      o_next_next_pc => next_next_pc);
+      o_next_pc      => next_pc);
 
   ife : entity work.Fetch(rtl3)
     generic map (
@@ -150,7 +148,6 @@ begin  -- architecture rtl
       kill_req             => wb_is_jump,
       i_pc                 => current_pc,
       i_next_pc            => next_pc,
-      i_next_next_pc       => next_next_pc,
       o_instruction        => fetched_instruction,
       o_pc_instr           => fetched_pc,
       o_do_stall_pc        => fetch_stalls_pc,

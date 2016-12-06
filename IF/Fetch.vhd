@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-10
--- Last update: 2016-12-05
+-- Last update: 2016-12-06
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -40,7 +40,6 @@ entity Fetch is
 
     i_pc                 : in  std_logic_vector(ADDR_WIDTH - 1 downto 0);
     i_next_pc            : in  std_logic_vector(ADDR_WIDTH - 1 downto 0);
-    i_next_next_pc       : in  std_logic_vector(ADDR_WIDTH - 1 downto 0);
     o_pc_instr           : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
     o_instruction        : out std_logic_vector(DATA_WIDTH - 1 downto 0);
     o_do_stall_pc        : out std_logic;

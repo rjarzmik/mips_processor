@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-13
--- Last update: 2016-12-05
+-- Last update: 2016-12-06
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -41,8 +41,7 @@ entity PC_Register is
     --              this is because Fetch stage fetches from
     jump_target    : in  std_logic_vector(ADDR_WIDTH - 1 downto 0);
     o_current_pc   : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
-    o_next_pc      : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
-    o_next_next_pc : out std_logic_vector(ADDR_WIDTH - 1 downto 0)
+    o_next_pc      : out std_logic_vector(ADDR_WIDTH - 1 downto 0)
     );
 
 end entity PC_Register;
@@ -79,14 +78,6 @@ begin  -- architecture rtl
     port map (
       current_pc => pc_next,
       next_pc    => pc_next_stepped);
-
-  next_next_pc_add4 : PC_Adder
-    generic map (
-      ADDR_WIDTH => ADDR_WIDTH,
-      STEP       => STEP)
-    port map (
-      current_pc => pc_next,
-      next_pc    => o_next_next_pc);
 
   process(clk, rst) is
     variable jump_recorded_valid          : boolean := false;
