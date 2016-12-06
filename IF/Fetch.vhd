@@ -23,6 +23,7 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
+use work.cpu_defs.all;
 -------------------------------------------------------------------------------
 
 entity Fetch is
@@ -43,6 +44,7 @@ entity Fetch is
     o_pc_instr           : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
     o_instruction        : out std_logic_vector(DATA_WIDTH - 1 downto 0);
     o_do_stall_pc        : out std_logic;
+    o_instr_tag          : out instr_tag_t;
     -- L2 connections
     o_L2c_req            : out std_logic;
     o_L2c_addr           : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
@@ -74,8 +76,9 @@ architecture rtl3 of Fetch is
   signal dbg_iprovider_fetching : addr_t;
 
   --- Outgoing to next pipeline stage instruction
-  signal out_pc   : addr_t;
-  signal out_data : data_t;
+  signal out_pc        : addr_t;
+  signal out_data      : data_t;
+  signal out_instr_tag : instr_tag_t;
 
 begin
   iprovider : entity work.Instruction_Provider
@@ -112,21 +115,30 @@ begin
   fetch_outputs_latcher : process(clk, rst, kill_req, stall_req)
   begin
     if rst = '1' then
-      out_pc   <= (others => 'X');
-      out_data <= (others => 'X');
-    end if;
-    if rst = '0' and rising_edge(clk) then
+      out_pc        <= (others => 'X');
+      out_data      <= (others => 'X');
+      out_instr_tag <= INSTR_TAG_NONE + 1;
+      o_instr_tag   <= INSTR_TAG_NONE;
+    elsif rising_edge(clk) then
       if kill_req = '1' then
-        out_pc   <= (others => 'X');
-        out_data <= nop_instruction;
+        out_pc      <= (others => 'X');
+        out_data    <= nop_instruction;
+        o_instr_tag <= INSTR_TAG_NONE;
       elsif stall_req = '1' then
       else
         if iprovider_data_valid = '1' then
-          out_pc   <= iprovider_pc;
-          out_data <= iprovider_data;
+          out_pc                                          <= iprovider_pc;
+          out_data                                        <= iprovider_data;
+          if ((out_instr_tag + 1) mod NB_PIPELINE_STAGES) = INSTR_TAG_NONE then
+            out_instr_tag <= INSTR_TAG_NONE + 1;
+          else
+            out_instr_tag <= (out_instr_tag + 1) mod NB_PIPELINE_STAGES;
+          end if;
+          o_instr_tag <= out_instr_tag;
         else
-          out_pc   <= (others => 'X');
-          out_data <= nop_instruction;
+          out_pc      <= (others => 'X');
+          out_data    <= nop_instruction;
+          o_instr_tag <= INSTR_TAG_NONE;
         end if;
       end if;
     end if;

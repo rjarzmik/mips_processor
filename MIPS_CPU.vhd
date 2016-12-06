@@ -67,6 +67,7 @@ architecture rtl of MIPS_CPU is
   signal fetched_instruction : std_logic_vector(DATA_WIDTH - 1 downto 0);
   signal fetched_pc          : std_logic_vector(DATA_WIDTH - 1 downto 0);
   signal fetch_stalls_pc     : std_logic;
+  signal di_instr_tag        : instr_tag_t;
   signal alu_op              : alu_op_type;
   signal di2ex_ra            : std_logic_vector(DATA_WIDTH - 1 downto 0);
   signal di2ex_rb            : std_logic_vector(DATA_WIDTH - 1 downto 0);
@@ -86,6 +87,7 @@ architecture rtl of MIPS_CPU is
   signal di2ex_jump_op       : jump_type;
   signal di2ex_mem_data      : std_logic_vector(DATA_WIDTH - 1 downto 0);
   signal di2ex_mem_op        : memory_op_type;
+  signal ex_instr_tag        : instr_tag_t;
 
   signal ex2wb_reg1        : register_port_type;
   signal ex2wb_reg2        : register_port_type;
@@ -93,10 +95,12 @@ architecture rtl of MIPS_CPU is
   signal ex2wb_is_jump     : std_logic;
   signal ex2wb_mem_data    : std_logic_vector(DATA_WIDTH - 1 downto 0);
   signal ex2wb_mem_op      : memory_op_type;
+  signal wb_instr_tag      : instr_tag_t;
 
-  signal wb_is_jump        : std_logic;
-  signal wb_jump_target    : std_logic_vector(ADDR_WIDTH - 1 downto 0);
-  signal wb_kills_pipeline : std_logic;
+  signal wb_is_jump         : std_logic;
+  signal wb_jump_target     : std_logic_vector(ADDR_WIDTH - 1 downto 0);
+  signal wb_kills_pipeline  : std_logic;
+  signal commited_instr_tag : instr_tag_t;
 
   -- Control signals
   --- Dependencies checkers
@@ -129,13 +133,13 @@ begin  -- architecture rtl
       ADDR_WIDTH => ADDR_WIDTH,
       STEP       => 4)
     port map (
-      clk            => clk,
-      rst            => rst,
-      stall_pc       => pc_stalled,
-      jump_pc        => wb_is_jump,
-      jump_target    => wb_jump_target,
-      o_current_pc   => current_pc,
-      o_next_pc      => next_pc);
+      clk          => clk,
+      rst          => rst,
+      stall_pc     => pc_stalled,
+      jump_pc      => wb_is_jump,
+      jump_target  => wb_jump_target,
+      o_current_pc => current_pc,
+      o_next_pc    => next_pc);
 
   ife : entity work.Fetch(rtl3)
     generic map (
@@ -151,6 +155,7 @@ begin  -- architecture rtl
       o_instruction        => fetched_instruction,
       o_pc_instr           => fetched_pc,
       o_do_stall_pc        => fetch_stalls_pc,
+      o_instr_tag          => di_instr_tag,
       o_L2c_req            => o_L2c_req,
       o_L2c_addr           => o_L2c_addr,
       i_L2c_read_data      => i_L2c_read_data,
@@ -173,6 +178,7 @@ begin  -- architecture rtl
       kill_req       => di_killed,
       i_instruction  => fetched_instruction,
       i_pc           => fetched_pc,
+      i_instr_tag    => di_instr_tag,
       i_rwb_reg1     => wb2di_reg1,
       i_rwb_reg2     => wb2di_reg2,
       o_alu_op       => alu_op,
@@ -183,6 +189,7 @@ begin  -- architecture rtl
       o_mem_data     => di2ex_mem_data,
       o_mem_op       => di2ex_mem_op,
       o_divide_0     => di2ex_divide_0,
+      o_instr_tag    => ex_instr_tag,
       o_src_reg1_idx => di2ctrl_reg1_idx,
       o_src_reg2_idx => di2ctrl_reg2_idx,
       i_dbg_di_pc    => dbg_di_pc,
@@ -205,6 +212,7 @@ begin  -- architecture rtl
       i_jump_op     => di2ex_jump_op,
       i_mem_data    => di2ex_mem_data,
       i_mem_op      => di2ex_mem_op,
+      i_instr_tag   => ex_instr_tag,
       i_divide_0    => di2ex_divide_0,
       o_reg1        => ex2wb_reg1,
       o_reg2        => ex2wb_reg2,
@@ -212,6 +220,7 @@ begin  -- architecture rtl
       o_is_jump     => ex2wb_is_jump,
       o_mem_data    => ex2wb_mem_data,
       o_mem_op      => ex2wb_mem_op,
+      o_instr_tag   => wb_instr_tag,
       i_dbg_ex_pc   => dbg_ex_pc,
       o_dbg_ex_pc   => dbg_wb_pc);
 
@@ -233,6 +242,8 @@ begin  -- architecture rtl
       o_reg2        => wb2di_reg2,
       o_is_jump     => wb_is_jump,
       o_jump_target => wb_jump_target,
+      i_instr_tag   => wb_instr_tag,
+      o_instr_tag   => commited_instr_tag,
       i_dbg_wb_pc   => dbg_wb_pc,
       o_dbg_wb_pc   => dbg_commited_pc);
 

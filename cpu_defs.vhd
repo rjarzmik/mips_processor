@@ -27,6 +27,11 @@ use ieee.std_logic_1164.all;
 package cpu_defs is
   constant REGISTER_WIDTH : integer := 32;
   constant NB_REGISTERS_MAX : natural := 35;
+  -- Smallest 2 power with at least : None, Fetch, Decode/Issue, Execute, Memory, Writeback
+  constant NB_PIPELINE_STAGES : natural := 8;
+
+  subtype instr_tag_t is natural range 0 to NB_PIPELINE_STAGES - 1;
+  constant INSTR_TAG_NONE : instr_tag_t := 0;
 
   attribute enum_encoding : string;
   type jump_type is (none, always, zero, non_zero, lesser_or_zero, greater, lesser, greater_or_zero);

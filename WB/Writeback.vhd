@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-16
--- Last update: 2016-12-05
+-- Last update: 2016-12-06
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -48,6 +48,9 @@ entity Writeback is
     o_reg2        : out register_port_type;
     o_is_jump     : out std_logic;
     o_jump_target : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
+    -- Carry-over signals
+    i_instr_tag   : in  instr_tag_t;
+    o_instr_tag   : out instr_tag_t;
     -- Debug signal
     i_dbg_wb_pc   : in  std_logic_vector(ADDR_WIDTH - 1 downto 0);
     o_dbg_wb_pc   : out std_logic_vector(ADDR_WIDTH - 1 downto 0)
@@ -79,16 +82,18 @@ begin  -- architecture rtl
   process(rst, clk, stall_req)
   begin
     if rst = '1' then
-      reg1.we <= '0';
-      reg2.we <= '0';
-      is_jump <= '0';
+      reg1.we     <= '0';
+      reg2.we     <= '0';
+      is_jump     <= '0';
+      o_instr_tag <= INSTR_TAG_NONE;
     elsif rising_edge(clk) then
       if kill_req = '1' then
-        reg1.we <= '0';
-        reg2.we <= '0';
-        is_jump <= '0';
-        o_is_jump <= '0';
+        reg1.we       <= '0';
+        reg2.we       <= '0';
+        is_jump       <= '0';
+        o_is_jump     <= '0';
         o_jump_target <= (others => 'X');
+        o_instr_tag   <= INSTR_TAG_NONE;
       elsif stall_req = '0' then
         --- Branch delay slot of 1 : output i_is_jump and i_jump_target is set
         --- on o_is_jump and o_jump_target only with another no-NOP instruction.
@@ -96,7 +101,7 @@ begin  -- architecture rtl
           if is_jump = '1' then
           -- Still no real instruction, retain the jump
           else
-          -- No jump retained and a nop, do usual latching
+            -- No jump retained and a nop, do usual latching
             o_is_jump     <= is_jump;
             o_jump_target <= jump_target;
             is_jump       <= i_is_jump;
@@ -116,10 +121,11 @@ begin  -- architecture rtl
             jump_target   <= i_jump_target;
           end if;
         end if;
+        o_instr_tag <= i_instr_tag;
       end if;
 
-      reg1 <= i_reg1;
-      reg2 <= i_reg2;
+      reg1        <= i_reg1;
+      reg2        <= i_reg2;
     end if;
   end process;
 

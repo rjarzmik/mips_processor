@@ -45,6 +45,7 @@ entity Decode is
     kill_req       : in  std_logic;     -- kill current instruction
     i_instruction  : in  std_logic_vector(DATA_WIDTH - 1 downto 0);
     i_pc           : in  std_logic_vector(ADDR_WIDTH - 1 downto 0);
+    i_instr_tag    : in  instr_tag_t;
     --- Writeback input
     i_rwb_reg1     : in  register_port_type;
     i_rwb_reg2     : in  register_port_type;
@@ -57,6 +58,7 @@ entity Decode is
     o_mem_data     : out std_logic_vector(DATA_WIDTH - 1 downto 0);
     o_mem_op       : out memory_op_type;
     o_divide_0     : out std_logic;  -- if set, a division attempt will be a X/0
+    o_instr_tag    : out instr_tag_t;
     --- Control outputs
     o_src_reg1_idx : out natural range 0 to NB_REGISTERS - 1;
     o_src_reg2_idx : out natural range 0 to NB_REGISTERS - 1;
@@ -183,7 +185,8 @@ architecture rtl of Decode is
     signal jump_target  : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
     signal jump_op      : out jump_type;
     signal mem_op       : out memory_op_type;
-    signal o_divide_0   : out std_logic) is
+    signal o_divide_0   : out std_logic;
+    signal instr_tag    : out instr_tag_t) is
   begin
     decode_error <= '0';
     alu_op       <= all_zero;
@@ -196,6 +199,7 @@ architecture rtl of Decode is
     jump_op      <= none;
     mem_op       <= none;
     o_divide_0   <= '1';
+    instr_tag    <= INSTR_TAG_NONE;
   end procedure do_reset;
 
   procedure do_kill_pipeline_stage(
@@ -210,7 +214,8 @@ architecture rtl of Decode is
     signal jump_target  : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
     signal jump_op      : out jump_type;
     signal mem_op       : out memory_op_type;
-    signal o_divide_0   : out std_logic) is
+    signal o_divide_0   : out std_logic;
+    signal instr_tag    : out instr_tag_t) is
   begin
     decode_error <= '0';
     alu_op       <= all_zero;
@@ -224,6 +229,7 @@ architecture rtl of Decode is
     jump_target  <= (others => '0');
     mem_op       <= none;
     o_divide_0   <= '1';
+    instr_tag    <= INSTR_TAG_NONE;
   end procedure do_kill_pipeline_stage;
 
   procedure do_branch(
@@ -608,11 +614,12 @@ begin  -- architecture rtl
   begin
     if rst = '1' then
       do_reset(decode_error, alu_op, ra, rb, o_reg1.we, o_reg1_idx, o_reg2.we,
-               o_reg2_idx, o_jump_target, o_jump_op, o_mem_op, o_divide_0);
+               o_reg2_idx, o_jump_target, o_jump_op, o_mem_op, o_divide_0,
+               o_instr_tag);
     elsif kill_req = '1' and rising_edge(clk) then
       do_kill_pipeline_stage(decode_error, alu_op, ra, rb, o_reg1.we, o_reg1_idx,
                              o_reg2.we, o_reg2_idx, o_jump_target, o_jump_op,
-                             o_mem_op, o_divide_0);
+                             o_mem_op, o_divide_0, o_instr_tag);
     elsif stall_req = '0' and rising_edge(clk) then
       if is_branch = '1' then
         do_branch(op_code, next_pc, immediate, rs, rt,
@@ -640,6 +647,7 @@ begin  -- architecture rtl
                ra, rb, o_reg1.we, o_reg1_idx, o_reg2.we, o_jump_target,
                o_jump_op, o_mem_op, o_divide_0);
       end if;
+      o_instr_tag <= i_instr_tag;
     end if;
 
     o_reg1.idx <= o_reg1_idx;

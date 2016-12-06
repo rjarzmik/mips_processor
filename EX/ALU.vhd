@@ -43,18 +43,20 @@ entity ALU is
     alu_op        : in  alu_op_type;
     i_reg1        : in  register_port_type;
     i_reg2        : in  register_port_type;
-    i_divide_0    : in  std_logic; -- if set, a division attempt will be a X/0
+    i_divide_0    : in  std_logic;  -- if set, a division attempt will be a X/0
     -- Carry-over signals
     i_jump_target : in  std_logic_vector(ADDR_WIDTH - 1 downto 0);
     i_jump_op     : in  jump_type;
     i_mem_data    : in  std_logic_vector(DATA_WIDTH - 1 downto 0);
     i_mem_op      : in  memory_op_type;
+    i_instr_tag   : in  instr_tag_t;
     o_reg1        : out register_port_type;
     o_reg2        : out register_port_type;
     o_jump_target : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
     o_is_jump     : out std_logic;
     o_mem_data    : out std_logic_vector(DATA_WIDTH - 1 downto 0);
     o_mem_op      : out memory_op_type;
+    o_instr_tag   : out instr_tag_t;
     -- Debug signal
     i_dbg_ex_pc   : in  std_logic_vector(ADDR_WIDTH - 1 downto 0);
     o_dbg_ex_pc   : out std_logic_vector(ADDR_WIDTH - 1 downto 0)
@@ -181,15 +183,17 @@ begin  -- architecture rtl
   process(rst, clk, kill_req, stall_req)
   begin
     if rst = '1' and rising_edge(clk) then
-      o_reg1.we <= '0';
-      o_reg2.we <= '0';
-      o_is_jump <= '0';
-      o_mem_op  <= none;
+      o_reg1.we   <= '0';
+      o_reg2.we   <= '0';
+      o_is_jump   <= '0';
+      o_mem_op    <= none;
+      o_instr_tag <= INSTR_TAG_NONE;
     elsif kill_req = '1' and rising_edge(clk) then
-      o_reg1.we <= '0';
-      o_reg2.we <= '0';
-      o_is_jump <= '0';
-      o_mem_op  <= none;
+      o_reg1.we   <= '0';
+      o_reg2.we   <= '0';
+      o_is_jump   <= '0';
+      o_mem_op    <= none;
+      o_instr_tag <= INSTR_TAG_NONE;
     elsif stall_req = '0' and rising_edge(clk) then
       o_reg1.we     <= i_reg1.we;
       o_reg1.idx    <= i_reg1.idx;
@@ -202,6 +206,7 @@ begin  -- architecture rtl
 
       o_reg1.data <= std_logic_vector(q(DATA_WIDTH -1 downto 0));
       o_reg2.data <= std_logic_vector(q(DATA_WIDTH * 2 -1 downto DATA_WIDTH));
+      o_instr_tag <= i_instr_tag;
     end if;
   end process;
 
