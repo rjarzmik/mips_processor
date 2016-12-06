@@ -214,8 +214,8 @@ architecture rtl of Decode is
   begin
     decode_error <= '0';
     alu_op       <= all_zero;
-    ra           <= (others => 'X');
-    rb           <= (others => 'X');
+    ra           <= (others => '0');
+    rb           <= (others => '0');
     reg1_we      <= '0';
     reg1_idx     <= 0;
     reg2_we      <= '0';
@@ -266,6 +266,9 @@ architecture rtl of Decode is
     elsif op_code = op_bltz then
       rb      <= std_logic_vector(to_unsigned(0, DATA_WIDTH));
       jump_op <= lesser;
+    else
+      rb      <= (others => '0');
+      jump_op <= none;
     end if;
     jump_target <= std_logic_vector(unsigned(next_pc) + unsigned(resize(immediate * 4, ADDR_WIDTH)));
     o_divide_0  <= '1';
@@ -380,8 +383,6 @@ architecture rtl of Decode is
       reg1_we      <= '0';
       reg2_we      <= '0';
       jump_op      <= none;
-      ra           <= (others => 'X');
-      rb           <= (others => 'X');
     else
       ra      <= rs;
       rb      <= rt;
