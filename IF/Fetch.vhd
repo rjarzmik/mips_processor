@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-10
--- Last update: 2016-12-07
+-- Last update: 2016-12-08
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -54,6 +54,7 @@ entity Fetch is
     -- Writeback feedback signals
     i_is_jump                  : in  std_logic;
     i_jump_target              : in  std_logic_vector(ADDR_WIDTH - 1 downto 0);
+    i_commited_instr_tag       : in  instr_tag_t;
     -- Debug signals
     o_dbg_if_pc                : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
     o_dbg_if_fetching_pc       : out std_logic_vector(ADDR_WIDTH - 1 downto 0)
@@ -128,6 +129,7 @@ begin
       stall_pc               => do_stall_pc,
       jump_pc                => i_is_jump,
       jump_target            => i_jump_target,
+      i_commited_instr_tag   => i_commited_instr_tag,
       o_current_pc           => pcprovider_pc,
       o_current_pc_instr_tag => pcprovider_pc_instr_tag,
       o_next_pc              => pcprovider_next_pc,

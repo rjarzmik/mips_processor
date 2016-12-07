@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-13
--- Last update: 2016-12-07
+-- Last update: 2016-12-08
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -41,6 +41,7 @@ entity PC_Register is
     jump_pc                : in  std_logic;
     -- jump_target: should appear on o_pc
     jump_target            : in  std_logic_vector(ADDR_WIDTH - 1 downto 0);
+    i_commited_instr_tag   : in  instr_tag_t;
     o_current_pc           : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
     o_current_pc_instr_tag : out instr_tag_t;
     o_next_pc              : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
@@ -78,7 +79,9 @@ architecture rtl of PC_Register is
   signal pc_next_stepped   : std_logic_vector(ADDR_WIDTH - 1 downto 0);
 
   --- Instruction tracker
-  signal instr_tag : instr_tag_t;
+  signal instr_tag          : instr_tag_t;
+  signal itrack_req_pc      : std_logic;
+  signal itrack_req_pc_next : std_logic;
 
 --- Jump internal signals
 begin  -- architecture rtl
@@ -94,17 +97,33 @@ begin  -- architecture rtl
       current_pc => pc_next,
       next_pc    => pc_next_stepped);
 
+  itracker : entity work.Instruction_Tracker
+    generic map (
+      ADDR_WIDTH => ADDR_WIDTH)
+    port map (
+      clk                  => clk,
+      rst                  => rst,
+      i_record_pc1_req     => itrack_req_pc,
+      i_record_pc2_req     => itrack_req_pc_next,
+      i_pc1                => pc,
+      i_pc2                => pc_next,
+      i_pc1_instr_tag      => pc_instr_tag,
+      i_pc2_instr_tag      => pc_next_instr_tag,
+      i_commited_instr_tag => i_commited_instr_tag);
+
   process(clk, rst) is
     variable jump_recorded_valid          : boolean := false;
     variable jump_recorded_target         : std_logic_vector(ADDR_WIDTH - 1 downto 0);
     variable jump_recorded_target_stepped : std_logic_vector(ADDR_WIDTH - 1 downto 0);
   begin
     if rst = '1' then
-      pc      <= std_logic_vector(to_signed(0, ADDR_WIDTH));
-      pc_next <= std_logic_vector(to_signed(4, ADDR_WIDTH));
-      pc_instr_tag <= INSTR_TAG_FIRST_VALID;
-      pc_next_instr_tag <= get_next_instr_tag(INSTR_TAG_FIRST_VALID, 1);
+      pc                 <= std_logic_vector(to_signed(0, ADDR_WIDTH));
+      pc_next            <= std_logic_vector(to_signed(4, ADDR_WIDTH));
+      pc_instr_tag       <= INSTR_TAG_FIRST_VALID;
+      pc_next_instr_tag  <= get_next_instr_tag(INSTR_TAG_FIRST_VALID, 1);
       update_next_instr_tag(get_next_instr_tag(INSTR_TAG_FIRST_VALID, 1), instr_tag);
+      itrack_req_pc      <= '1';
+      itrack_req_pc_next <= '1';
     elsif rising_edge(clk) then
       if jump_pc = '1' then
         jump_recorded_valid  := true;
@@ -118,15 +137,22 @@ begin  -- architecture rtl
           pc_next              <= std_logic_vector(unsigned(jump_recorded_target) + STEP);
           pc_next_instr_tag    <= get_next_instr_tag(instr_tag, 2);
           update_next_instr_tag(get_next_instr_tag(instr_tag, 2), instr_tag);
+          itrack_req_pc        <= '1';
+          itrack_req_pc_next   <= '1';
           jump_recorded_valid  := false;
           jump_recorded_target := (others => 'X');
         else
-          pc                <= pc_next;
-          pc_instr_tag      <= pc_next_instr_tag;
-          pc_next           <= pc_next_stepped;
-          pc_next_instr_tag <= get_next_instr_tag(instr_tag, 1);
+          pc                 <= pc_next;
+          pc_instr_tag       <= pc_next_instr_tag;
+          pc_next            <= pc_next_stepped;
+          pc_next_instr_tag  <= get_next_instr_tag(instr_tag, 1);
           update_next_instr_tag(get_next_instr_tag(instr_tag, 1), instr_tag);
+          itrack_req_pc      <= '0';
+          itrack_req_pc_next <= '1';
         end if;
+      else
+        itrack_req_pc      <= '0';
+        itrack_req_pc_next <= '0';
       end if;
     end if;
   end process;

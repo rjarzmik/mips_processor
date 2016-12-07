@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-11
--- Last update: 2016-12-07
+-- Last update: 2016-12-08
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -148,6 +148,7 @@ begin  -- architecture rtl
       i_L2c_valid                => i_L2c_valid,
       i_is_jump                  => wb_is_jump,
       i_jump_target              => wb_jump_target,
+      i_commited_instr_tag       => commited_instr_tag,
       o_dbg_if_fetching_pc       => dbg_if_pc,
       o_dbg_if_pc                => dbg_di_pc);
 
