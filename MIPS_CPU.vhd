@@ -99,22 +99,22 @@ architecture rtl of MIPS_CPU is
 
   signal wb_is_jump         : std_logic;
   signal wb_jump_target     : std_logic_vector(ADDR_WIDTH - 1 downto 0);
-  signal wb_kills_pipeline  : std_logic;
   signal commited_instr_tag : instr_tag_t;
 
   -- Control signals
   --- Dependencies checkers
-  signal RaW_detected : std_logic;
+  signal RaW_detected              : std_logic;
   --- Pipeline stage stallers
-  signal pc_stalled   : std_logic;
-  signal ife_stalled  : std_logic;
-  signal di_stalled   : std_logic;
-  signal ex_stalled   : std_logic;
-  signal wb_stalled   : std_logic;
+  signal pc_stalled                : std_logic;
+  signal ife_stalled               : std_logic;
+  signal di_stalled                : std_logic;
+  signal ex_stalled                : std_logic;
+  signal wb_stalled                : std_logic;
   --- Pipeline stage output killers (ie. "nop" replacement of stage output)
-  signal di_killed    : std_logic;
-  signal ex_killed    : std_logic;
-  signal wb_killed    : std_logic;
+  signal mispredict_kills_pipeline : std_logic;
+  signal di_killed                 : std_logic;
+  signal ex_killed                 : std_logic;
+  signal wb_killed                 : std_logic;
 
   -- Debug signals
   signal dbg_if_pc       : std_logic_vector(ADDR_WIDTH - 1 downto 0);
@@ -128,39 +128,27 @@ begin  -- architecture rtl
   -----------------------------------------------------------------------------
   -- Component instantiations
   -----------------------------------------------------------------------------
-  pc_reg : entity work.PC_Register
-    generic map (
-      ADDR_WIDTH => ADDR_WIDTH,
-      STEP       => 4)
-    port map (
-      clk          => clk,
-      rst          => rst,
-      stall_pc     => pc_stalled,
-      jump_pc      => wb_is_jump,
-      jump_target  => wb_jump_target,
-      o_current_pc => current_pc,
-      o_next_pc    => next_pc);
-
   ife : entity work.Fetch(rtl3)
     generic map (
       ADDR_WIDTH => ADDR_WIDTH,
       DATA_WIDTH => DATA_WIDTH)
     port map (
-      clk                  => clk,
-      rst                  => rst,
-      stall_req            => ife_stalled,
-      kill_req             => wb_is_jump,
-      o_instruction        => fetched_instruction,
-      o_pc_instr           => fetched_pc,
-      o_instr_tag          => di_instr_tag,
-      o_L2c_req            => o_L2c_req,
-      o_L2c_addr           => o_L2c_addr,
-      i_L2c_read_data      => i_L2c_read_data,
-      i_L2c_valid          => i_L2c_valid,
-      i_is_jump            => wb_is_jump,
-      i_jump_target        => wb_jump_target,
-      o_dbg_if_fetching_pc => dbg_if_pc,
-      o_dbg_if_pc          => dbg_di_pc);
+      clk                        => clk,
+      rst                        => rst,
+      stall_req                  => ife_stalled,
+      kill_req                   => '0',
+      o_instruction              => fetched_instruction,
+      o_pc_instr                 => fetched_pc,
+      o_instr_tag                => di_instr_tag,
+      o_mispredict_kill_pipeline => mispredict_kills_pipeline,
+      o_L2c_req                  => o_L2c_req,
+      o_L2c_addr                 => o_L2c_addr,
+      i_L2c_read_data            => i_L2c_read_data,
+      i_L2c_valid                => i_L2c_valid,
+      i_is_jump                  => wb_is_jump,
+      i_jump_target              => wb_jump_target,
+      o_dbg_if_fetching_pc       => dbg_if_pc,
+      o_dbg_if_pc                => dbg_di_pc);
 
   di : entity work.Decode
     generic map (
@@ -262,8 +250,6 @@ begin  -- architecture rtl
       i_wb2di_reg2   => wb2di_reg2,
       o_raw_detected => RaW_detected);
 
-  wb_kills_pipeline <= wb_is_jump;
-
   -- Control signals
   pc_stalled  <= fetch_stalls_pc;
   ife_stalled <= RaW_detected;
@@ -271,9 +257,9 @@ begin  -- architecture rtl
   ex_stalled  <= '0';
   wb_stalled  <= '0';
 
-  di_killed <= wb_kills_pipeline or RaW_detected;
-  ex_killed <= wb_kills_pipeline;
-  wb_killed <= wb_kills_pipeline;
+  di_killed <= mispredict_kills_pipeline or RaW_detected;
+  ex_killed <= mispredict_kills_pipeline;
+  wb_killed <= mispredict_kills_pipeline;
 
   -- Debug signal
   o_dbg_if_pc       <= dbg_if_pc;

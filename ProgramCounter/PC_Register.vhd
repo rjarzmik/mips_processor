@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-13
--- Last update: 2016-12-06
+-- Last update: 2016-12-07
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -37,11 +37,11 @@ entity PC_Register is
     rst            : in  std_logic;
     stall_pc       : in  std_logic;
     jump_pc        : in  std_logic;
-    -- jump_target: should appear on o_next_pc and not o_current_pc !!!
-    --              this is because Fetch stage fetches from
+    -- jump_target: should appear on o_pc
     jump_target    : in  std_logic_vector(ADDR_WIDTH - 1 downto 0);
     o_current_pc   : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
-    o_next_pc      : out std_logic_vector(ADDR_WIDTH - 1 downto 0)
+    o_next_pc      : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
+    o_mispredicted : out std_logic
     );
 
 end entity PC_Register;
@@ -107,8 +107,13 @@ begin  -- architecture rtl
     end if;
   end process;
 
+  --- Outputs
   o_current_pc <= pc;
   o_next_pc    <= pc_next;
+
+  --- Misprediction
+  --- When fetch mispredicted, signal to kill the pipeline
+  o_mispredicted <= jump_pc;
 
 end architecture rtl;
 

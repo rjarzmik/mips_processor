@@ -40,20 +40,21 @@ entity Fetch is
     stall_req : in std_logic;           -- stall current instruction
     kill_req  : in std_logic;           -- kill current instruction
 
-    o_pc_instr           : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
-    o_instruction        : out std_logic_vector(DATA_WIDTH - 1 downto 0);
-    o_instr_tag          : out instr_tag_t;
+    o_pc_instr                 : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
+    o_instruction              : out std_logic_vector(DATA_WIDTH - 1 downto 0);
+    o_instr_tag                : out instr_tag_t;
+    o_mispredict_kill_pipeline : out std_logic;
     -- L2 connections
-    o_L2c_req            : out std_logic;
-    o_L2c_addr           : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
-    i_L2c_read_data      : in  std_logic_vector(DATA_WIDTH - 1 downto 0);
-    i_L2c_valid          : in  std_logic;
+    o_L2c_req                  : out std_logic;
+    o_L2c_addr                 : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
+    i_L2c_read_data            : in  std_logic_vector(DATA_WIDTH - 1 downto 0);
+    i_L2c_valid                : in  std_logic;
     -- Writeback feedback signals
-    i_is_jump            : in  std_logic;
-    i_jump_target        :     std_logic_vector(ADDR_WIDTH - 1 downto 0);
+    i_is_jump                  : in  std_logic;
+    i_jump_target              : in  std_logic_vector(ADDR_WIDTH - 1 downto 0);
     -- Debug signals
-    o_dbg_if_pc          : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
-    o_dbg_if_fetching_pc : out std_logic_vector(ADDR_WIDTH - 1 downto 0)
+    o_dbg_if_pc                : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
+    o_dbg_if_fetching_pc       : out std_logic_vector(ADDR_WIDTH - 1 downto 0)
     );
 
 end entity Fetch;
@@ -67,12 +68,13 @@ architecture rtl3 of Fetch is
   constant nop_instruction : std_logic_vector(DATA_WIDTH - 1 downto 0) := (others => '0');
 
   --- Control signal
-  signal kill_next_pc : std_logic;
-  signal do_stall_pc  : std_logic;
+  signal kill_fetch  : std_logic;       -- Fetch stage is killed, wipe out.
+  signal do_stall_pc : std_logic;
 
   --- Signal from program counter provider
-  signal pcprovider_pc      : addr_t;
-  signal pcprovider_next_pc : addr_t;
+  signal pcprovider_pc           : addr_t;
+  signal pcprovider_next_pc      : addr_t;
+  signal pcprovider_mispredicted : std_logic;
 
   --- Signals from instruction provider
   signal iprovider_pc           : addr_t;
@@ -94,7 +96,7 @@ begin
     port map (
       clk             => clk,
       rst             => rst,
-      kill_req        => kill_next_pc,
+      kill_req        => kill_fetch,
       stall_req       => stall_req,
       i_next_pc       => pcprovider_pc,
       i_next_next_pc  => pcprovider_next_pc,
@@ -113,25 +115,29 @@ begin
       ADDR_WIDTH => ADDR_WIDTH,
       STEP       => STEP)
     port map (
-      clk          => clk,
-      rst          => rst,
-      stall_pc     => do_stall_pc,
-      jump_pc      => i_is_jump,
-      jump_target  => i_jump_target,
-      o_current_pc => pcprovider_pc,
-      o_next_pc    => pcprovider_next_pc);
+      clk            => clk,
+      rst            => rst,
+      stall_pc       => do_stall_pc,
+      jump_pc        => i_is_jump,
+      jump_target    => i_jump_target,
+      o_current_pc   => pcprovider_pc,
+      o_next_pc      => pcprovider_next_pc,
+      o_mispredicted => pcprovider_mispredicted);
 
   --- PC stepper
   do_stall_pc <= '1' when iprovider_do_step_pc = '0' else '0';
 
   --- PC jump handler
-  kill_next_pc <= kill_req;
+  kill_fetch <= kill_req or i_is_jump;
+
+  --- When PC program mispredicted, signal to kill the pipeline
+  o_mispredict_kill_pipeline <= pcprovider_mispredicted;
 
   --- Decode input provider
   o_instruction <= out_data;
   o_pc_instr    <= out_pc;
 
-  fetch_outputs_latcher : process(clk, rst, kill_req, stall_req)
+  fetch_outputs_latcher : process(clk, rst, kill_fetch, stall_req)
   begin
     if rst = '1' then
       out_pc        <= (others => 'X');
@@ -139,7 +145,7 @@ begin
       out_instr_tag <= INSTR_TAG_NONE + 1;
       o_instr_tag   <= INSTR_TAG_NONE;
     elsif rising_edge(clk) then
-      if kill_req = '1' then
+      if kill_fetch = '1' then
         out_pc      <= (others => 'X');
         out_data    <= nop_instruction;
         o_instr_tag <= INSTR_TAG_NONE;
