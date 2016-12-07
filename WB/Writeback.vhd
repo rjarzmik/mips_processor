@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-16
--- Last update: 2016-12-06
+-- Last update: 2016-12-07
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -23,6 +23,7 @@ library ieee;
 use ieee.std_logic_1164.all;
 
 use work.cpu_defs.all;
+use work.instruction_defs.all;
 
 -------------------------------------------------------------------------------
 
@@ -65,11 +66,12 @@ architecture rtl of Writeback is
   -----------------------------------------------------------------------------
   -- Internal signal declarations
   -----------------------------------------------------------------------------
-  signal reg1        : register_port_type;
-  signal reg2        : register_port_type;
-  signal is_nop      : boolean;
-  signal is_jump     : std_logic;
-  signal jump_target : std_logic_vector(ADDR_WIDTH - 1 downto 0);
+  signal reg1           : register_port_type;
+  signal reg2           : register_port_type;
+  signal is_nop         : boolean;
+  signal is_jump        : std_logic;
+  signal jump_target    : std_logic_vector(ADDR_WIDTH - 1 downto 0);
+  signal jump_instr_tag : instr_tag_t;
 
 begin  -- architecture rtl
 
@@ -82,10 +84,11 @@ begin  -- architecture rtl
   process(rst, clk, stall_req)
   begin
     if rst = '1' then
-      reg1.we     <= '0';
-      reg2.we     <= '0';
-      is_jump     <= '0';
-      o_instr_tag <= INSTR_TAG_NONE;
+      reg1.we        <= '0';
+      reg2.we        <= '0';
+      is_jump        <= '0';
+      o_instr_tag    <= INSTR_TAG_NONE;
+      jump_instr_tag <= INSTR_TAG_NONE;
     elsif rising_edge(clk) then
       if kill_req = '1' then
         reg1.we       <= '0';
@@ -107,25 +110,33 @@ begin  -- architecture rtl
             is_jump       <= i_is_jump;
             jump_target   <= i_jump_target;
           end if;
+          o_instr_tag <= i_instr_tag;
         else
           if is_jump = '1' then
             -- Transfer the jump and the writeback instruction together
-            o_is_jump     <= is_jump;
-            o_jump_target <= jump_target;
-            is_jump       <= i_is_jump;
-            jump_target   <= i_jump_target;
+            -- The o_instr_tag is changed from the instruction just after the
+            -- branch to the instruction branch, for branch prediction.
+            o_is_jump      <= is_jump;
+            o_jump_target  <= jump_target;
+            is_jump        <= i_is_jump;
+            jump_target    <= i_jump_target;
+            jump_instr_tag <= i_instr_tag;
+            o_instr_tag <= get_instr_change_is_branch_taken(jump_instr_tag,
+                                                            is_jump = '1');
           else
-            o_is_jump     <= is_jump;
-            o_jump_target <= jump_target;
-            is_jump       <= i_is_jump;
-            jump_target   <= i_jump_target;
+            o_is_jump      <= is_jump;
+            o_jump_target  <= jump_target;
+            is_jump        <= i_is_jump;
+            jump_target    <= i_jump_target;
+            jump_instr_tag <= i_instr_tag;
+            o_instr_tag <= get_instr_change_is_branch_taken(i_instr_tag,
+                                                            is_jump = '1');
           end if;
         end if;
-        o_instr_tag <= i_instr_tag;
       end if;
 
-      reg1        <= i_reg1;
-      reg2        <= i_reg2;
+      reg1 <= i_reg1;
+      reg2 <= i_reg2;
     end if;
   end process;
 

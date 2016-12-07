@@ -24,6 +24,7 @@ use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
 use work.cpu_defs.all;
+use work.instruction_defs.all;
 -------------------------------------------------------------------------------
 
 entity PC_Register is
@@ -61,17 +62,6 @@ architecture rtl of PC_Register is
       next_pc    : out std_logic_vector(ADDR_WIDTH - 1 downto 0));
   end component PC_Adder;
 
-  function get_next_instr_tag(itag : in instr_tag_t) return instr_tag_t is
-    variable tag : instr_tag_t;
-  begin
-    if ((itag + 1) mod NB_PIPELINE_STAGES) = INSTR_TAG_NONE then
-      tag := INSTR_TAG_NONE + 1;
-    else
-      tag := (itag + 1) mod NB_PIPELINE_STAGES;
-    end if;
-    return tag;
-  end function get_next_instr_tag;
-
   procedure update_next_instr_tag(last_used_tag : in  instr_tag_t;
                                   signal itag   : out instr_tag_t) is
   begin
@@ -88,7 +78,7 @@ architecture rtl of PC_Register is
   signal pc_next_stepped   : std_logic_vector(ADDR_WIDTH - 1 downto 0);
 
   --- Instruction tracker
-  signal instr_tag : instr_tag_t := INSTR_TAG_NONE + 1;
+  signal instr_tag : instr_tag_t;
 
 --- Jump internal signals
 begin  -- architecture rtl
@@ -110,11 +100,11 @@ begin  -- architecture rtl
     variable jump_recorded_target_stepped : std_logic_vector(ADDR_WIDTH - 1 downto 0);
   begin
     if rst = '1' then
-      pc                <= std_logic_vector(to_signed(0, ADDR_WIDTH));
-      pc_next           <= std_logic_vector(to_signed(4, ADDR_WIDTH));
-      instr_tag         <= INSTR_TAG_NONE + 2;
-      pc_instr_tag      <= INSTR_TAG_NONE + 1;
-      pc_next_instr_tag <= INSTR_TAG_NONE + 2;
+      pc      <= std_logic_vector(to_signed(0, ADDR_WIDTH));
+      pc_next <= std_logic_vector(to_signed(4, ADDR_WIDTH));
+      pc_instr_tag <= INSTR_TAG_FIRST_VALID;
+      pc_next_instr_tag <= get_next_instr_tag(INSTR_TAG_FIRST_VALID, 1);
+      update_next_instr_tag(get_next_instr_tag(INSTR_TAG_FIRST_VALID, 1), instr_tag);
     elsif rising_edge(clk) then
       if jump_pc = '1' then
         jump_recorded_valid  := true;
@@ -124,18 +114,18 @@ begin  -- architecture rtl
       if stall_pc = '0' then
         if jump_recorded_valid then
           pc                   <= jump_recorded_target;
-          pc_instr_tag         <= get_next_instr_tag(instr_tag);
+          pc_instr_tag         <= get_next_instr_tag(instr_tag, 1);
           pc_next              <= std_logic_vector(unsigned(jump_recorded_target) + STEP);
-          pc_next_instr_tag    <= get_next_instr_tag(get_next_instr_tag(instr_tag));
-          update_next_instr_tag(get_next_instr_tag(get_next_instr_tag(instr_tag)), instr_tag);
+          pc_next_instr_tag    <= get_next_instr_tag(instr_tag, 2);
+          update_next_instr_tag(get_next_instr_tag(instr_tag, 2), instr_tag);
           jump_recorded_valid  := false;
           jump_recorded_target := (others => 'X');
         else
           pc                <= pc_next;
           pc_instr_tag      <= pc_next_instr_tag;
           pc_next           <= pc_next_stepped;
-          pc_next_instr_tag <= get_next_instr_tag(instr_tag);
-          update_next_instr_tag(get_next_instr_tag(instr_tag), instr_tag);
+          pc_next_instr_tag <= get_next_instr_tag(instr_tag, 1);
+          update_next_instr_tag(get_next_instr_tag(instr_tag, 1), instr_tag);
         end if;
       end if;
     end if;

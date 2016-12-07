@@ -24,6 +24,8 @@ use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
 use work.cpu_defs.all;
+use work.instruction_defs.all;
+
 -------------------------------------------------------------------------------
 
 entity Fetch is

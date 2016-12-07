@@ -24,6 +24,7 @@ use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
 use work.cpu_defs.all;
+use work.instruction_defs.all;
 
 -------------------------------------------------------------------------------
 
@@ -56,8 +57,8 @@ architecture test of Instruction_Provider_tb is
 
   signal next_pc    : addr_t;
   signal after_pc   : addr_t;
-  signal next_itag  : instr_tag_t := INSTR_TAG_NONE + 1;
-  signal after_itag : instr_tag_t := INSTR_TAG_NONE + 2;
+  signal next_itag  : instr_tag_t := INSTR_TAG_NONE;
+  signal after_itag : instr_tag_t := INSTR_TAG_NONE;
 
 begin  -- architecture test
 

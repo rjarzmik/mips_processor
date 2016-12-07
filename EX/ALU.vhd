@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik (Intel)  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-16
--- Last update: 2016-12-06
+-- Last update: 2016-12-07
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -24,6 +24,7 @@ use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
 use work.cpu_defs.all;
+use work.instruction_defs.all;
 
 -------------------------------------------------------------------------------
 

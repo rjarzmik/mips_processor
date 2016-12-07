@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-12
--- Last update: 2016-12-06
+-- Last update: 2016-12-07
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -24,6 +24,7 @@ use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
 use work.cpu_defs.all;
+use work.instruction_defs.all;
 
 -------------------------------------------------------------------------------
 
@@ -647,7 +648,7 @@ begin  -- architecture rtl
                ra, rb, o_reg1.we, o_reg1_idx, o_reg2.we, o_jump_target,
                o_jump_op, o_mem_op, o_divide_0);
       end if;
-      o_instr_tag <= i_instr_tag;
+      o_instr_tag <= get_instr_change_is_branch(i_instr_tag, is_branch = '1');
     end if;
 
     o_reg1.idx <= o_reg1_idx;
