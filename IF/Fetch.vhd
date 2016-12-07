@@ -72,21 +72,24 @@ architecture rtl3 of Fetch is
   signal do_stall_pc : std_logic;
 
   --- Signal from program counter provider
-  signal pcprovider_pc           : addr_t;
-  signal pcprovider_next_pc      : addr_t;
-  signal pcprovider_mispredicted : std_logic;
+  signal pcprovider_pc                : addr_t;
+  signal pcprovider_pc_instr_tag      : instr_tag_t;
+  signal pcprovider_next_pc           : addr_t;
+  signal pcprovider_next_pc_instr_tag : instr_tag_t;
+  signal pcprovider_mispredicted      : std_logic;
 
   --- Signals from instruction provider
   signal iprovider_pc           : addr_t;
+  signal iprovider_pc_instr_tag : instr_tag_t;
   signal iprovider_data         : data_t;
   signal iprovider_data_valid   : std_logic;
   signal iprovider_do_step_pc   : std_logic;
   signal dbg_iprovider_fetching : addr_t;
 
   --- Outgoing to next pipeline stage instruction
-  signal out_pc        : addr_t;
-  signal out_data      : data_t;
-  signal out_instr_tag : instr_tag_t;
+  signal out_pc   : addr_t;
+  signal out_data : data_t;
+  signal out_itag : instr_tag_t;
 
 begin
   iprovider : entity work.Instruction_Provider
@@ -94,35 +97,40 @@ begin
       ADDR_WIDTH => ADDR_WIDTH,
       DATA_WIDTH => DATA_WIDTH)
     port map (
-      clk             => clk,
-      rst             => rst,
-      kill_req        => kill_fetch,
-      stall_req       => stall_req,
-      i_next_pc       => pcprovider_pc,
-      i_next_next_pc  => pcprovider_next_pc,
-      o_pc            => iprovider_pc,
-      o_data          => iprovider_data,
-      o_valid         => iprovider_data_valid,
-      o_do_step_pc    => iprovider_do_step_pc,
-      o_L2c_req       => o_L2c_req,
-      o_L2c_addr      => o_L2c_addr,
-      i_L2c_read_data => i_L2c_read_data,
-      i_L2c_valid     => i_L2c_valid,
-      o_dbg_fetching  => dbg_iprovider_fetching);
+      clk                      => clk,
+      rst                      => rst,
+      kill_req                 => kill_fetch,
+      stall_req                => stall_req,
+      i_next_pc                => pcprovider_pc,
+      i_next_pc_instr_tag      => pcprovider_pc_instr_tag,
+      i_next_next_pc           => pcprovider_next_pc,
+      i_next_next_pc_instr_tag => pcprovider_next_pc_instr_tag,
+      o_pc                     => iprovider_pc,
+      o_instr_tag              => iprovider_pc_instr_tag,
+      o_data                   => iprovider_data,
+      o_valid                  => iprovider_data_valid,
+      o_do_step_pc             => iprovider_do_step_pc,
+      o_L2c_req                => o_L2c_req,
+      o_L2c_addr               => o_L2c_addr,
+      i_L2c_read_data          => i_L2c_read_data,
+      i_L2c_valid              => i_L2c_valid,
+      o_dbg_fetching           => dbg_iprovider_fetching);
 
   pc_reg : entity work.PC_Register
     generic map (
       ADDR_WIDTH => ADDR_WIDTH,
       STEP       => STEP)
     port map (
-      clk            => clk,
-      rst            => rst,
-      stall_pc       => do_stall_pc,
-      jump_pc        => i_is_jump,
-      jump_target    => i_jump_target,
-      o_current_pc   => pcprovider_pc,
-      o_next_pc      => pcprovider_next_pc,
-      o_mispredicted => pcprovider_mispredicted);
+      clk                    => clk,
+      rst                    => rst,
+      stall_pc               => do_stall_pc,
+      jump_pc                => i_is_jump,
+      jump_target            => i_jump_target,
+      o_current_pc           => pcprovider_pc,
+      o_current_pc_instr_tag => pcprovider_pc_instr_tag,
+      o_next_pc              => pcprovider_next_pc,
+      o_next_pc_instr_tag    => pcprovider_next_pc_instr_tag,
+      o_mispredicted         => pcprovider_mispredicted);
 
   --- PC stepper
   do_stall_pc <= '1' when iprovider_do_step_pc = '0' else '0';
@@ -136,34 +144,29 @@ begin
   --- Decode input provider
   o_instruction <= out_data;
   o_pc_instr    <= out_pc;
+  o_instr_tag   <= out_itag;
 
   fetch_outputs_latcher : process(clk, rst, kill_fetch, stall_req)
   begin
     if rst = '1' then
-      out_pc        <= (others => 'X');
-      out_data      <= (others => 'X');
-      out_instr_tag <= INSTR_TAG_NONE + 1;
-      o_instr_tag   <= INSTR_TAG_NONE;
+      out_pc   <= (others => 'X');
+      out_data <= (others => 'X');
+      out_itag <= INSTR_TAG_NONE;
     elsif rising_edge(clk) then
       if kill_fetch = '1' then
-        out_pc      <= (others => 'X');
-        out_data    <= nop_instruction;
-        o_instr_tag <= INSTR_TAG_NONE;
+        out_pc   <= (others => 'X');
+        out_data <= nop_instruction;
+        out_itag <= INSTR_TAG_NONE;
       elsif stall_req = '1' then
       else
         if iprovider_data_valid = '1' then
           out_pc   <= iprovider_pc;
           out_data <= iprovider_data;
-          if ((out_instr_tag + 1) mod NB_PIPELINE_STAGES) = INSTR_TAG_NONE then
-            out_instr_tag <= INSTR_TAG_NONE + 1;
-          else
-            out_instr_tag <= (out_instr_tag + 1) mod NB_PIPELINE_STAGES;
-          end if;
-          o_instr_tag <= out_instr_tag;
+          out_itag <= iprovider_pc_instr_tag;
         else
-          out_pc      <= (others => 'X');
-          out_data    <= nop_instruction;
-          o_instr_tag <= INSTR_TAG_NONE;
+          out_pc   <= (others => 'X');
+          out_data <= nop_instruction;
+          out_itag <= INSTR_TAG_NONE;
         end if;
       end if;
     end if;

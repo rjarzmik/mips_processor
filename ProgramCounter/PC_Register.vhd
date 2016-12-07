@@ -23,6 +23,7 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
+use work.cpu_defs.all;
 -------------------------------------------------------------------------------
 
 entity PC_Register is
@@ -33,15 +34,17 @@ entity PC_Register is
     );
 
   port (
-    clk            : in  std_logic;
-    rst            : in  std_logic;
-    stall_pc       : in  std_logic;
-    jump_pc        : in  std_logic;
+    clk                    : in  std_logic;
+    rst                    : in  std_logic;
+    stall_pc               : in  std_logic;
+    jump_pc                : in  std_logic;
     -- jump_target: should appear on o_pc
-    jump_target    : in  std_logic_vector(ADDR_WIDTH - 1 downto 0);
-    o_current_pc   : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
-    o_next_pc      : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
-    o_mispredicted : out std_logic
+    jump_target            : in  std_logic_vector(ADDR_WIDTH - 1 downto 0);
+    o_current_pc           : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
+    o_current_pc_instr_tag : out instr_tag_t;
+    o_next_pc              : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
+    o_next_pc_instr_tag    : out instr_tag_t;
+    o_mispredicted         : out std_logic
     );
 
 end entity PC_Register;
@@ -58,12 +61,34 @@ architecture rtl of PC_Register is
       next_pc    : out std_logic_vector(ADDR_WIDTH - 1 downto 0));
   end component PC_Adder;
 
+  function get_next_instr_tag(itag : in instr_tag_t) return instr_tag_t is
+    variable tag : instr_tag_t;
+  begin
+    if ((itag + 1) mod NB_PIPELINE_STAGES) = INSTR_TAG_NONE then
+      tag := INSTR_TAG_NONE + 1;
+    else
+      tag := (itag + 1) mod NB_PIPELINE_STAGES;
+    end if;
+    return tag;
+  end function get_next_instr_tag;
+
+  procedure update_next_instr_tag(last_used_tag : in  instr_tag_t;
+                                  signal itag   : out instr_tag_t) is
+  begin
+    itag <= last_used_tag;
+  end procedure update_next_instr_tag;
+
   -----------------------------------------------------------------------------
   -- Internal signal declarations
   -----------------------------------------------------------------------------
-  signal pc              : std_logic_vector(ADDR_WIDTH - 1 downto 0);
-  signal pc_next         : std_logic_vector(ADDR_WIDTH - 1 downto 0);
-  signal pc_next_stepped : std_logic_vector(ADDR_WIDTH - 1 downto 0);
+  signal pc                : std_logic_vector(ADDR_WIDTH - 1 downto 0);
+  signal pc_instr_tag      : instr_tag_t;
+  signal pc_next           : std_logic_vector(ADDR_WIDTH - 1 downto 0);
+  signal pc_next_instr_tag : instr_tag_t;
+  signal pc_next_stepped   : std_logic_vector(ADDR_WIDTH - 1 downto 0);
+
+  --- Instruction tracker
+  signal instr_tag : instr_tag_t := INSTR_TAG_NONE + 1;
 
 --- Jump internal signals
 begin  -- architecture rtl
@@ -85,8 +110,11 @@ begin  -- architecture rtl
     variable jump_recorded_target_stepped : std_logic_vector(ADDR_WIDTH - 1 downto 0);
   begin
     if rst = '1' then
-      pc      <= std_logic_vector(to_signed(0, ADDR_WIDTH));
-      pc_next <= std_logic_vector(to_signed(4, ADDR_WIDTH));
+      pc                <= std_logic_vector(to_signed(0, ADDR_WIDTH));
+      pc_next           <= std_logic_vector(to_signed(4, ADDR_WIDTH));
+      instr_tag         <= INSTR_TAG_NONE + 2;
+      pc_instr_tag      <= INSTR_TAG_NONE + 1;
+      pc_next_instr_tag <= INSTR_TAG_NONE + 2;
     elsif rising_edge(clk) then
       if jump_pc = '1' then
         jump_recorded_valid  := true;
@@ -96,20 +124,28 @@ begin  -- architecture rtl
       if stall_pc = '0' then
         if jump_recorded_valid then
           pc                   <= jump_recorded_target;
+          pc_instr_tag         <= get_next_instr_tag(instr_tag);
           pc_next              <= std_logic_vector(unsigned(jump_recorded_target) + STEP);
+          pc_next_instr_tag    <= get_next_instr_tag(get_next_instr_tag(instr_tag));
+          update_next_instr_tag(get_next_instr_tag(get_next_instr_tag(instr_tag)), instr_tag);
           jump_recorded_valid  := false;
           jump_recorded_target := (others => 'X');
         else
-          pc      <= pc_next;
-          pc_next <= pc_next_stepped;
+          pc                <= pc_next;
+          pc_instr_tag      <= pc_next_instr_tag;
+          pc_next           <= pc_next_stepped;
+          pc_next_instr_tag <= get_next_instr_tag(instr_tag);
+          update_next_instr_tag(get_next_instr_tag(instr_tag), instr_tag);
         end if;
       end if;
     end if;
   end process;
 
   --- Outputs
-  o_current_pc <= pc;
-  o_next_pc    <= pc_next;
+  o_current_pc           <= pc;
+  o_current_pc_instr_tag <= pc_instr_tag;
+  o_next_pc              <= pc_next;
+  o_next_pc_instr_tag    <= pc_next_instr_tag;
 
   --- Misprediction
   --- When fetch mispredicted, signal to kill the pipeline

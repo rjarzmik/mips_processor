@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-12-03
--- Last update: 2016-12-04
+-- Last update: 2016-12-07
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -22,6 +22,8 @@
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
+
+use work.cpu_defs.all;
 
 -------------------------------------------------------------------------------
 
@@ -52,8 +54,10 @@ architecture test of Instruction_Provider_tb is
   signal i_L2c_read_data : std_logic_vector(DATA_WIDTH - 1 downto 0);
   signal i_L2c_valid     : std_logic;
 
-  signal next_pc  : addr_t;
-  signal after_pc : addr_t;
+  signal next_pc    : addr_t;
+  signal after_pc   : addr_t;
+  signal next_itag  : instr_tag_t := INSTR_TAG_NONE + 1;
+  signal after_itag : instr_tag_t := INSTR_TAG_NONE + 2;
 
 begin  -- architecture test
 
@@ -63,20 +67,22 @@ begin  -- architecture test
       ADDR_WIDTH => ADDR_WIDTH,
       DATA_WIDTH => DATA_WIDTH)
     port map (
-      clk             => clk,
-      rst             => rst,
-      kill_req        => '0',
-      stall_req       => '0',
-      i_next_pc       => next_pc,
-      i_next_next_pc  => after_pc,
-      o_pc            => o_pc,
-      o_data          => o_data,
-      o_valid         => o_valid,
-      o_do_step_pc    => o_do_step_pc,
-      o_L2c_req       => o_L2c_req,
-      o_L2c_addr      => o_L2c_addr,
-      i_L2c_read_data => i_L2c_read_data,
-      i_L2c_valid     => i_L2c_valid);
+      clk                      => clk,
+      rst                      => rst,
+      kill_req                 => '0',
+      stall_req                => '0',
+      i_next_pc                => next_pc,
+      i_next_pc_instr_tag      => next_itag,
+      i_next_next_pc           => after_pc,
+      i_next_next_pc_instr_tag => after_itag,
+      o_pc                     => o_pc,
+      o_data                   => o_data,
+      o_valid                  => o_valid,
+      o_do_step_pc             => o_do_step_pc,
+      o_L2c_req                => o_L2c_req,
+      o_L2c_addr               => o_L2c_addr,
+      i_L2c_read_data          => i_L2c_read_data,
+      i_L2c_valid              => i_L2c_valid);
 
   -- reset
   rst <= '0'     after 12 ps;
