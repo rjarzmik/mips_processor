@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-11
--- Last update: 2016-12-06
+-- Last update: 2016-12-07
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -150,16 +150,15 @@ begin  -- architecture rtl
       rst                  => rst,
       stall_req            => ife_stalled,
       kill_req             => wb_is_jump,
-      i_pc                 => current_pc,
-      i_next_pc            => next_pc,
       o_instruction        => fetched_instruction,
       o_pc_instr           => fetched_pc,
-      o_do_stall_pc        => fetch_stalls_pc,
       o_instr_tag          => di_instr_tag,
       o_L2c_req            => o_L2c_req,
       o_L2c_addr           => o_L2c_addr,
       i_L2c_read_data      => i_L2c_read_data,
       i_L2c_valid          => i_L2c_valid,
+      i_is_jump            => wb_is_jump,
+      i_jump_target        => wb_jump_target,
       o_dbg_if_fetching_pc => dbg_if_pc,
       o_dbg_if_pc          => dbg_di_pc);
 

@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-10
--- Last update: 2016-12-06
+-- Last update: 2016-12-07
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -30,7 +30,8 @@ entity Fetch is
 
   generic (
     ADDR_WIDTH : integer := 32;
-    DATA_WIDTH : integer := 32
+    DATA_WIDTH : integer := 32;
+    STEP       : natural := 4
     );
 
   port (
@@ -39,17 +40,17 @@ entity Fetch is
     stall_req : in std_logic;           -- stall current instruction
     kill_req  : in std_logic;           -- kill current instruction
 
-    i_pc                 : in  std_logic_vector(ADDR_WIDTH - 1 downto 0);
-    i_next_pc            : in  std_logic_vector(ADDR_WIDTH - 1 downto 0);
     o_pc_instr           : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
     o_instruction        : out std_logic_vector(DATA_WIDTH - 1 downto 0);
-    o_do_stall_pc        : out std_logic;
     o_instr_tag          : out instr_tag_t;
     -- L2 connections
     o_L2c_req            : out std_logic;
     o_L2c_addr           : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
     i_L2c_read_data      : in  std_logic_vector(DATA_WIDTH - 1 downto 0);
     i_L2c_valid          : in  std_logic;
+    -- Writeback feedback signals
+    i_is_jump            : in  std_logic;
+    i_jump_target        :     std_logic_vector(ADDR_WIDTH - 1 downto 0);
     -- Debug signals
     o_dbg_if_pc          : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
     o_dbg_if_fetching_pc : out std_logic_vector(ADDR_WIDTH - 1 downto 0)
@@ -67,6 +68,11 @@ architecture rtl3 of Fetch is
 
   --- Control signal
   signal kill_next_pc : std_logic;
+  signal do_stall_pc  : std_logic;
+
+  --- Signal from program counter provider
+  signal pcprovider_pc      : addr_t;
+  signal pcprovider_next_pc : addr_t;
 
   --- Signals from instruction provider
   signal iprovider_pc           : addr_t;
@@ -90,8 +96,8 @@ begin
       rst             => rst,
       kill_req        => kill_next_pc,
       stall_req       => stall_req,
-      i_next_pc       => i_pc,
-      i_next_next_pc  => i_next_pc,
+      i_next_pc       => pcprovider_pc,
+      i_next_next_pc  => pcprovider_next_pc,
       o_pc            => iprovider_pc,
       o_data          => iprovider_data,
       o_valid         => iprovider_data_valid,
@@ -102,8 +108,21 @@ begin
       i_L2c_valid     => i_L2c_valid,
       o_dbg_fetching  => dbg_iprovider_fetching);
 
+  pc_reg : entity work.PC_Register
+    generic map (
+      ADDR_WIDTH => ADDR_WIDTH,
+      STEP       => STEP)
+    port map (
+      clk          => clk,
+      rst          => rst,
+      stall_pc     => do_stall_pc,
+      jump_pc      => i_is_jump,
+      jump_target  => i_jump_target,
+      o_current_pc => pcprovider_pc,
+      o_next_pc    => pcprovider_next_pc);
+
   --- PC stepper
-  o_do_stall_pc <= '1' when iprovider_do_step_pc = '0' else '0';
+  do_stall_pc <= '1' when iprovider_do_step_pc = '0' else '0';
 
   --- PC jump handler
   kill_next_pc <= kill_req;
@@ -127,8 +146,8 @@ begin
       elsif stall_req = '1' then
       else
         if iprovider_data_valid = '1' then
-          out_pc                                          <= iprovider_pc;
-          out_data                                        <= iprovider_data;
+          out_pc   <= iprovider_pc;
+          out_data <= iprovider_data;
           if ((out_instr_tag + 1) mod NB_PIPELINE_STAGES) = INSTR_TAG_NONE then
             out_instr_tag <= INSTR_TAG_NONE + 1;
           else
