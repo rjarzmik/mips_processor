@@ -53,6 +53,8 @@ set_global_assignment -name POWER_PRESET_COOLING_SOLUTION "23 MM HEAT SINK WITH 
 set_global_assignment -name POWER_BOARD_THERMAL_MODEL "NONE (CONSERVATIVE)"
 set_global_assignment -name PROJECT_IP_REGENERATION_POLICY ALWAYS_REGENERATE_IP
 set_global_assignment -name EDA_TIME_SCALE "1 ns" -section_id eda_simulation
+set_global_assignment -name VHDL_FILE ProgramCounter/instruction_record.vhd
+set_global_assignment -name VHDL_FILE ProgramCounter/Instruction_Tracker.vhd
 set_global_assignment -name VHDL_FILE instruction_tag.vhd
 set_global_assignment -name VHDL_FILE EX/ALU_Set_Lower_Than.vhd
 set_global_assignment -name VHDL_FILE EX/ALU_Substracter.vhd

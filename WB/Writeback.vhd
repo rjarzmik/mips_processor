@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-16
--- Last update: 2016-12-07
+-- Last update: 2016-12-08
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -66,12 +66,13 @@ architecture rtl of Writeback is
   -----------------------------------------------------------------------------
   -- Internal signal declarations
   -----------------------------------------------------------------------------
-  signal reg1           : register_port_type;
-  signal reg2           : register_port_type;
-  signal is_nop         : boolean;
-  signal is_jump        : std_logic;
-  signal jump_target    : std_logic_vector(ADDR_WIDTH - 1 downto 0);
-  signal jump_instr_tag : instr_tag_t;
+  signal reg1             : register_port_type;
+  signal reg2             : register_port_type;
+  signal is_nop           : boolean;
+  signal is_jump          : std_logic;
+  signal last_is_jump     : std_logic;
+  signal last_jump_target : std_logic_vector(ADDR_WIDTH - 1 downto 0);
+  signal last_instr_tag   : instr_tag_t;
 
 begin  -- architecture rtl
 
@@ -84,11 +85,13 @@ begin  -- architecture rtl
   process(rst, clk, stall_req)
   begin
     if rst = '1' then
-      reg1.we        <= '0';
-      reg2.we        <= '0';
-      is_jump        <= '0';
-      o_instr_tag    <= INSTR_TAG_NONE;
-      jump_instr_tag <= INSTR_TAG_NONE;
+      reg1.we          <= '0';
+      reg2.we          <= '0';
+      is_jump          <= '0';
+      o_instr_tag      <= INSTR_TAG_NONE;
+      last_instr_tag   <= INSTR_TAG_NONE;
+      last_is_jump     <= '0';
+      last_jump_target <= (others => 'X');
     elsif rising_edge(clk) then
       if kill_req = '1' then
         reg1.we       <= '0';
@@ -98,45 +101,60 @@ begin  -- architecture rtl
         o_jump_target <= (others => 'X');
         o_instr_tag   <= INSTR_TAG_NONE;
       elsif stall_req = '0' then
-        --- Branch delay slot of 1 : output i_is_jump and i_jump_target is set
-        --- on o_is_jump and o_jump_target only with another no-NOP instruction.
-        if is_nop then
-          if is_jump = '1' then
-          -- Still no real instruction, retain the jump
-          else
-            -- No jump retained and a nop, do usual latching
-            o_is_jump     <= is_jump;
-            o_jump_target <= jump_target;
-            is_jump       <= i_is_jump;
-            jump_target   <= i_jump_target;
-          end if;
-          o_instr_tag <= i_instr_tag;
-        else
-          if is_jump = '1' then
-            -- Transfer the jump and the writeback instruction together
-            -- The o_instr_tag is changed from the instruction just after the
-            -- branch to the instruction branch, for branch prediction.
-            o_is_jump      <= is_jump;
-            o_jump_target  <= jump_target;
-            is_jump        <= i_is_jump;
-            jump_target    <= i_jump_target;
-            jump_instr_tag <= i_instr_tag;
-            o_instr_tag <= get_instr_change_is_branch_taken(jump_instr_tag,
-                                                            is_jump = '1');
-          else
-            o_is_jump      <= is_jump;
-            o_jump_target  <= jump_target;
-            is_jump        <= i_is_jump;
-            jump_target    <= i_jump_target;
-            jump_instr_tag <= i_instr_tag;
-            o_instr_tag <= get_instr_change_is_branch_taken(i_instr_tag,
-                                                            is_jump = '1');
-          end if;
+        if not is_nop then
+          last_instr_tag <=
+            get_instr_change_is_branch_taken(i_instr_tag, i_is_jump = '1');
+          last_is_jump     <= i_is_jump;
+          last_jump_target <= i_jump_target;
         end if;
-      end if;
 
-      reg1 <= i_reg1;
-      reg2 <= i_reg2;
+        -- Branch delay slot of 1 :
+        ---   If branch or jump, delay setting o_is_jump and o_jump_target to
+        ---   the next no-NOP instruction
+        ---   If not, forward as is.
+        if (last_instr_tag.is_branch or last_instr_tag.is_ja
+            or last_instr_tag.is_jr) and not is_nop then
+          -- Falsify the outputs to fake the jump/branch happens on the next
+          -- after jump/branch instruction, ie. delay slot of 1.
+          -- Transfer the jump and the writeback instruction together
+          -- The o_instr_tag is changed from the instruction just after the
+          -- branch to the instruction branch, for branch prediction.
+          o_is_jump     <= last_is_jump;
+          o_jump_target <= last_jump_target;
+          o_instr_tag <=
+            get_instr_change_is_branch_taken(
+              get_instr_change_is_branch(
+                get_instr_change_is_ja(
+                  get_instr_change_is_jr(i_instr_tag, last_instr_tag.is_jr),
+                  last_instr_tag.is_ja),
+                last_instr_tag.is_branch),
+              last_instr_tag.is_branch_taken);
+        elsif (i_instr_tag.is_branch or i_instr_tag.is_ja
+               or i_instr_tag.is_jr) then
+          -- As the jump information is kept in last_*, wipe out any
+          -- jump/branch sign from this instruction, as it will be reapplied on
+          -- the next one.
+          o_is_jump     <= '0';
+          o_jump_target <= (others => 'X');
+          o_instr_tag <=
+            get_instr_change_is_branch_taken(
+              get_instr_change_is_branch(
+                get_instr_change_is_ja(
+                  get_instr_change_is_jr(i_instr_tag, false),
+                  false),
+                false),
+              false);
+        else
+          -- Here there wasn't a "jump/branch" kept nor on the input
+          -- instruction, so forward normally everything.
+          o_is_jump     <= i_is_jump;
+          o_jump_target <= i_jump_target;
+          o_instr_tag   <= i_instr_tag;
+        end if;
+
+        reg1 <= i_reg1;
+        reg2 <= i_reg2;
+      end if;
     end if;
   end process;
 

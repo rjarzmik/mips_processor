@@ -109,7 +109,10 @@ begin  -- architecture rtl
       i_pc2                => pc_next,
       i_pc1_instr_tag      => pc_instr_tag,
       i_pc2_instr_tag      => pc_next_instr_tag,
-      i_commited_instr_tag => i_commited_instr_tag);
+      i_commited_instr_tag => i_commited_instr_tag,
+      o_mispredict         => o_mispredicted,
+      i_btb_instr_tag      => INSTR_TAG_NONE
+      );
 
   process(clk, rst) is
     variable jump_recorded_valid          : boolean := false;
@@ -132,20 +135,37 @@ begin  -- architecture rtl
 
       if stall_pc = '0' then
         if jump_recorded_valid then
-          pc                   <= jump_recorded_target;
-          pc_instr_tag         <= get_next_instr_tag(instr_tag, 1);
-          pc_next              <= std_logic_vector(unsigned(jump_recorded_target) + STEP);
-          pc_next_instr_tag    <= get_next_instr_tag(instr_tag, 2);
+          pc <= jump_recorded_target;
+          pc_instr_tag <=
+            get_instr_change_is_branch(
+              get_instr_change_is_branch_taken(
+                get_next_instr_tag(instr_tag, 1),
+                false),
+              false);
+          pc_next <= std_logic_vector(unsigned(jump_recorded_target) + STEP);
+          pc_next_instr_tag <=
+            get_instr_change_is_branch(
+              get_instr_change_is_branch_taken(
+                get_next_instr_tag(instr_tag, 2),
+                false),
+              false);
+
           update_next_instr_tag(get_next_instr_tag(instr_tag, 2), instr_tag);
           itrack_req_pc        <= '1';
           itrack_req_pc_next   <= '1';
           jump_recorded_valid  := false;
           jump_recorded_target := (others => 'X');
         else
-          pc                 <= pc_next;
-          pc_instr_tag       <= pc_next_instr_tag;
-          pc_next            <= pc_next_stepped;
-          pc_next_instr_tag  <= get_next_instr_tag(instr_tag, 1);
+          pc           <= pc_next;
+          pc_instr_tag <= pc_next_instr_tag;
+          pc_next      <= pc_next_stepped;
+          pc_next_instr_tag <=
+            get_instr_change_is_branch(
+              get_instr_change_is_branch_taken(
+                get_next_instr_tag(instr_tag, 1),
+                false),
+              false);
+
           update_next_instr_tag(get_next_instr_tag(instr_tag, 1), instr_tag);
           itrack_req_pc      <= '0';
           itrack_req_pc_next <= '1';
@@ -165,7 +185,7 @@ begin  -- architecture rtl
 
   --- Misprediction
   --- When fetch mispredicted, signal to kill the pipeline
-  o_mispredicted <= jump_pc;
+  --- This is now handled by the instruction tracker
 
 end architecture rtl;
 

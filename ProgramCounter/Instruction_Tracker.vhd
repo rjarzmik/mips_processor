@@ -24,6 +24,7 @@ use ieee.std_logic_1164.all;
 
 use work.cpu_defs.all;
 use work.instruction_defs.all;
+use work.instruction_record.all;
 
 -------------------------------------------------------------------------------
 
@@ -45,7 +46,14 @@ entity Instruction_Tracker is
     i_pc1_instr_tag      : in instr_tag_t;
     i_pc2_instr_tag      : in instr_tag_t;
     -- Retire instruction recorder
-    i_commited_instr_tag : in instr_tag_t
+    i_commited_instr_tag : in instr_tag_t;
+
+    -- Misprediction computation
+    o_mispredict : out std_logic;
+
+    -- Branch prediction module
+    i_btb_instr_tag    : in  instr_tag_t;
+    o_btb_instr_record : out instr_record  -- available on next cycle
     );
 
 end entity Instruction_Tracker;
@@ -55,30 +63,12 @@ end entity Instruction_Tracker;
 architecture rtl of Instruction_Tracker is
   subtype addr_t is std_logic_vector(ADDR_WIDTH - 1 downto 0);
 
-  type instr_record is record
-    pc       : addr_t;
-    commited : boolean;
-  end record;
-
-  type instr_records is array(0 to NB_PIPELINE_STAGES - 1) of instr_record;
-
   -----------------------------------------------------------------------------
   -- Internal signal declarations
   -----------------------------------------------------------------------------
-  signal itags : instr_records;
+  signal irecords              : instr_records;
+  signal commited_instr_record : instr_record;
 
-  procedure record_one_instr(signal pc    : in  addr_t; signal itag : in instr_tag_t;
-                             signal itags : out instr_records) is
-  begin
-    itags(itag.tag) <= (pc => pc, commited => false);
-  end procedure record_one_instr;
-
-  procedure retire_one_instr(signal itag : in instr_tag_t;
-                             signal itags : out instr_records) is
-  begin
-    itags(itag.tag).commited <= true;
-  end procedure retire_one_instr;
-  
 begin  -- architecture rtl
 
   itrack_recorder : process(clk, rst) is
@@ -86,16 +76,22 @@ begin  -- architecture rtl
     if rst = '1' then
     elsif rising_edge(clk) then
       if i_record_pc1_req = '1' then
-        record_one_instr(i_pc1, i_pc1_instr_tag, itags);
+        record_one_instr(i_pc1, i_pc1_instr_tag, irecords);
       end if;
       if i_record_pc2_req = '1' then
-        record_one_instr(i_pc2, i_pc2_instr_tag, itags);
+        record_one_instr(i_pc2, i_pc2_instr_tag, irecords);
       end if;
       if i_commited_instr_tag.valid then
-        retire_one_instr(i_commited_instr_tag, itags);
+        retire_one_instr(i_commited_instr_tag, irecords);
       end if;
     end if;
   end process itrack_recorder;
+
+  -- Misprediction
+  commited_instr_record <= get_record(i_commited_instr_tag, irecords);
+  o_mispredict          <= '0' when
+                  i_commited_instr_tag.is_branch_taken = commited_instr_record.predict_take_branch
+                  else '1';
 
 end architecture rtl;
 

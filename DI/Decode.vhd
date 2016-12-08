@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-12
--- Last update: 2016-12-07
+-- Last update: 2016-12-08
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -162,6 +162,7 @@ architecture rtl of Decode is
   signal is_immediate : std_logic;
   signal is_branch    : std_logic;
   signal is_jump      : std_logic;
+  signal is_jr        : std_logic;
   signal is_rtype     : std_logic;
   signal is_memory    : std_logic;
   -- Converters of register indexes from natural unbound to 0..NB_REGISTERS-1 range
@@ -648,7 +649,12 @@ begin  -- architecture rtl
                ra, rb, o_reg1.we, o_reg1_idx, o_reg2.we, o_jump_target,
                o_jump_op, o_mem_op, o_divide_0);
       end if;
-      o_instr_tag <= get_instr_change_is_branch(i_instr_tag, is_branch = '1');
+      o_instr_tag <=
+        get_instr_change_is_branch(
+          get_instr_change_is_ja(
+            get_instr_change_is_jr(i_instr_tag, is_jr = '1'),
+            is_jump = '1'),
+          is_branch = '1');
     end if;
 
     o_reg1.idx <= o_reg1_idx;
@@ -689,8 +695,9 @@ begin  -- architecture rtl
                (op_code = op_blez) or
                (op_code = op_bgtz) or
                (op_code = op_bltz) else '0';
-  is_rtype  <= '1' when (op_code = op_rtype)                  else '0';
-  is_jump   <= '1' when (op_code = op_j or op_code = op_jalr) else '0';
+  is_rtype  <= '1' when (op_code = op_rtype)                      else '0';
+  is_jump   <= '1' when (op_code = op_j or op_code = op_jalr)     else '0';
+  is_jr     <= '1' when (op_code = op_rtype) and (func = func_jr) else '0';
   is_memory <= '1' when (op_code = op_lui) or
                (op_code = op_lb) or
                (op_code = op_lw) or
