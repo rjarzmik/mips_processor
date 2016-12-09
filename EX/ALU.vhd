@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik (Intel)  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-16
--- Last update: 2016-12-07
+-- Last update: 2016-12-09
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -74,7 +74,7 @@ architecture rtl of ALU is
   -----------------------------------------------------------------------------
   -- Internal signal declarations
   -----------------------------------------------------------------------------
-  signal q          : unsigned(DATA_WIDTH * 2 - 1 downto 0);
+  signal q          : unsigned(DATA_WIDTH * 2 - 1 downto 0) := (others => '0');
   signal cond_zero  : std_logic;
   signal cond_carry : std_logic;
   signal jump_op    : jump_type;
@@ -165,6 +165,7 @@ begin  -- architecture rtl
     generic map (
       DATA_WIDTH => DATA_WIDTH)
     port map (
+      rst  => rst,
       i_ra => ra,
       i_rb => rb,
       o_q  => slt_q);
@@ -223,9 +224,11 @@ begin  -- architecture rtl
     end if;
   end process debug;
 
-  ra         <= unsigned(i_reg1.data);
-  rb         <= unsigned(i_reg2.data);
-  cond_zero  <= '1' when unsigned(q) = to_unsigned(0, q'length) else '0';
+  ra        <= (others => '0') when rst = '1' else unsigned(i_reg1.data);
+  rb        <= (others => '0') when rst = '1' else unsigned(i_reg2.data);
+  cond_zero <= '0'             when rst = '1' else
+               '1' when unsigned(q) = to_unsigned(0, q'length)
+               else '0';
   cond_carry <= q(DATA_WIDTH);
   jump_op    <= i_jump_op;
 

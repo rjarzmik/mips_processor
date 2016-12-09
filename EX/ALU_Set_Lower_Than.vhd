@@ -31,6 +31,7 @@ entity ALU_Set_Lower_Than is
     );
 
   port (
+    rst  : in  std_logic;
     i_ra : in  unsigned(DATA_WIDTH - 1 downto 0);
     i_rb : in  unsigned(DATA_WIDTH - 1 downto 0);
     o_q  : out unsigned(DATA_WIDTH * 2 - 1 downto 0)
@@ -47,9 +48,10 @@ architecture rtl of ALU_Set_Lower_Than is
 
 begin  -- architecture rtl
 
-  o_q <= result;
-  result <= to_unsigned(1, DATA_WIDTH * 2) when i_ra < i_rb
-            else to_unsigned(0, DATA_WIDTH * 2);
+  o_q    <= result;
+  result <= to_unsigned(0, DATA_WIDTH * 2) when rst = '1' else
+            to_unsigned(1, DATA_WIDTH * 2) when i_ra < i_rb else
+            to_unsigned(0, DATA_WIDTH * 2);
 
 end architecture rtl;
 

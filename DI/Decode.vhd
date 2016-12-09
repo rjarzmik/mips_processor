@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-12
--- Last update: 2016-12-08
+-- Last update: 2016-12-09
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -677,10 +677,10 @@ begin  -- architecture rtl
   op_code <= i_instruction(31 downto 26);
   func    <= i_instruction(5 downto 0);
 
-  rsi          <= to_integer(unsigned(i_instruction(25 downto 21)));
-  rti          <= to_integer(unsigned(i_instruction(20 downto 16)));
-  rdi          <= to_integer(unsigned(i_instruction(15 downto 11)));
-  immediate    <= signed(i_instruction(15 downto 0));
+  rsi          <= 0 when rst = '1' else to_integer(unsigned(i_instruction(25 downto 21)));
+  rti          <= 0 when rst = '1' else to_integer(unsigned(i_instruction(20 downto 16)));
+  rdi          <= 0 when rst = '1' else to_integer(unsigned(i_instruction(15 downto 11)));
+  immediate    <= (others => '0') when rst = '1' else signed(i_instruction(15 downto 0));
   pc_displace  <= i_instruction(23 downto 0) & b"00";
   is_immediate <= '1' when (op_code >= op_addi and op_code <= op_xori) or
                   (op_code = op_lui) or

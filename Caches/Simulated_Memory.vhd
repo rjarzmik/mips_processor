@@ -7,7 +7,7 @@
 --            : Simon Desfarges <simon.desfarges@free.fr>
 -- Company    : 
 -- Created    : 2016-11-20
--- Last update: 2016-11-30
+-- Last update: 2016-12-09
 -- Platform   : 
 -- Standard   : VHDL'08
 -------------------------------------------------------------------------------
@@ -131,8 +131,10 @@ begin  -- architecture rtl
     variable wait_clk : natural := 0;
   begin
     if rst = '1' then
-      memory_read_data <= (others => 'X');
-      memory_valid     <= '0';
+      memory_read_data   <= (others => 'X');
+      memory_valid       <= '0';
+      request_addr       <= (others => '0');
+      request_addr_valid <= false;
     elsif rising_edge(clk) and MEMORY_LATENCY > 0 then
       if i_memory_req = '1' and (not request_addr_valid or i_memory_addr /= request_addr) then
         wait_clk           := MEMORY_LATENCY - 1;
@@ -161,9 +163,11 @@ begin  -- architecture rtl
     end if;
   end process;
 
-  o_memory_valid     <= memory_valid     when (MEMORY_LATENCY > 0) else '1';
-  o_memory_read_data <= memory_read_data when (MEMORY_LATENCY > 1) else
-                        rom(to_integer(unsigned(request_addr)) / (DATA_WIDTH / 8)) when (MEMORY_LATENCY = 1) else
+  o_memory_valid <= '0' when rst = '1' else
+                    memory_valid when (MEMORY_LATENCY > 0) else '1';
+  o_memory_read_data <= (others => 'X') when rst = '1' else
+                        memory_read_data                                           when (MEMORY_LATENCY > 1) else
+                        rom(to_integer(unsigned(request_addr)) / (DATA_WIDTH / 8)) when request_addr_valid and (MEMORY_LATENCY = 1) else
                         rom(to_integer(unsigned(i_memory_addr)) / (DATA_WIDTH / 8));
 end architecture rtl;
 

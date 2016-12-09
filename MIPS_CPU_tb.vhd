@@ -280,11 +280,18 @@ begin  -- architecture rtl
     variable cycle           : integer                                   := 1;
     variable unusable_op     : std_logic_vector(DATA_WIDTH - 1 downto 0) := (others => 'X');
     variable passed_by_addr0 : natural                                   := 0;
+    variable fkill           : std_logic;
   begin
+    if dbg_ife_killed = '1' or dbg_jump_pc = '1' then
+      fkill := '1';
+    else
+      fkill := '0';
+    end if;
+
     if rising_edge(clk) then
       cycle := cycle + 1;
       report "[" & integer'image(cycle) & "] " &
-        dbg_get_stage_string("if", rst, dbg_ife_killed, dbg_ife_stalled, dbg_if_pc) & " " &
+        dbg_get_stage_string("if", rst, fkill, dbg_ife_stalled, dbg_if_pc) & " " &
         dbg_get_stage_string("di", rst, dbg_di_killed, dbg_di_stalled, dbg_di_pc) & " " &
         dbg_get_stage_string("ex", rst, dbg_ex_killed, dbg_ex_stalled, dbg_ex_pc) & " " &
         dbg_get_stage_string("wb", rst, dbg_wb_killed, dbg_wb_stalled, dbg_wb_pc) & " " &

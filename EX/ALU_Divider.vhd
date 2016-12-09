@@ -47,7 +47,7 @@ architecture rtl of ALU_Divider is
   constant r_unknown : unsigned(DATA_WIDTH - 1 downto 0) := (others => 'X');
   signal quotient    : unsigned(DATA_WIDTH - 1 downto 0);
   signal remain      : unsigned(DATA_WIDTH - 1 downto 0);
-  signal div_by_0    : boolean;
+  signal div_by_0    : boolean := true;
 
   function get_quotient(signal a        : in unsigned(DATA_WIDTH - 1 downto 0);
                         signal b        : in unsigned(DATA_WIDTH - 1 downto 0);
@@ -75,7 +75,7 @@ architecture rtl of ALU_Divider is
 
 begin  -- architecture rtl
 
-  div_by_0 <= i_div_by_0 = '1';
+  div_by_0 <= false when i_div_by_0 = '0' else true;
   remain   <= get_remain(i_ra, i_rb, div_by_0);
   quotient <= get_quotient(i_ra, i_rb, div_by_0);
 

@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-30
--- Last update: 2016-12-01
+-- Last update: 2016-12-09
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -106,6 +106,8 @@ architecture ways_N_associative of SinglePort_Associative_Cache is
   signal porta_data_cache_hit               : data_t;
   -- Signals reporting in real-time if memory_last_requested_addr is found in the cache
   signal memory_last_requested_is_cache_hit : boolean;
+  signal memory_never_requested             : boolean := true;
+  signal porta_never_requested              : boolean := true;
 
   constant cache_line_zero : cache_line_t := (
     valids => (others => '0'),
@@ -202,10 +204,14 @@ begin  -- architecture ways_N_associative
   -- Component instantiations
   -----------------------------------------------------------------------------
 
-  porta_is_cache_hit   <= is_cache_hit(porta_requested_addr, memory);
-  porta_data_cache_hit <= data_cache_hit(porta_requested_addr, memory);
+  porta_is_cache_hit <= false when rst = '1' or porta_never_requested else
+                        is_cache_hit(porta_requested_addr, memory);
+  porta_data_cache_hit <= (others => 'X') when rst = '1' else
+                          data_cache_hit(porta_requested_addr, memory);
 
-  memory_last_requested_is_cache_hit <= is_cache_hit(memory_last_requested_addr, memory);
+  memory_last_requested_is_cache_hit <=
+    false when memory_never_requested or rst = '1' else
+    is_cache_hit(memory_last_requested_addr, memory);
 
   o_porta_valid     <= '1'                  when porta_is_cache_hit else '0';
   o_porta_read_data <= porta_data_cache_hit when porta_is_cache_hit else (others => 'X');
@@ -213,9 +219,13 @@ begin  -- architecture ways_N_associative
 
   memory_tracker : process(clk, rst, need_memory_req)
   begin
-    if rst = '0' and rising_edge(clk) then
+    if rst = '1' then
+      memory_never_requested     <= true;
+      memory_last_requested_addr <= (others => '0');
+    elsif rst = '0' and rising_edge(clk) then
       if need_memory_req then
         memory_last_requested_addr <= outgoing_mem_addr;
+        memory_never_requested     <= false;
       end if;
     end if;
   end process memory_tracker;
@@ -223,19 +233,22 @@ begin  -- architecture ways_N_associative
   memory_request : process(clk, rst, i_porta_req)
   begin
     if rst = '1' then
-      need_memory_req     <= false;
-      o_memory_addr       <= (others => 'X');
-      o_memory_we         <= '0';
-      o_memory_write_data <= (others => 'X');
+      need_memory_req       <= false;
+      o_memory_addr         <= (others => '0');
+      o_memory_we           <= '0';
+      o_memory_write_data   <= (others => 'X');
+      porta_requested_addr  <= (others => '0');
+      porta_never_requested <= true;
     elsif rising_edge(clk) then
       if i_porta_req = '1' and
         (not porta_is_cache_hit or i_porta_addr /= porta_requested_addr) then
-        outgoing_mem_addr    <= i_porta_addr;
-        porta_requested_addr <= i_porta_addr;
-        need_memory_req      <= true;
-        o_memory_addr        <= i_porta_addr;
-        o_memory_we          <= i_porta_we;
-        o_memory_write_data  <= i_porta_write_data;
+        outgoing_mem_addr     <= i_porta_addr;
+        porta_never_requested <= false;
+        porta_requested_addr  <= i_porta_addr;
+        need_memory_req       <= true;
+        o_memory_addr         <= i_porta_addr;
+        o_memory_we           <= i_porta_we;
+        o_memory_write_data   <= i_porta_write_data;
       else
         need_memory_req   <= false;
         outgoing_mem_addr <= (others => 'X');
@@ -257,7 +270,7 @@ begin  -- architecture ways_N_associative
         memory(index).next_flushed <= ((memory(index).next_flushed + 1) mod NB_WAYS);
 
         memory(index).ways(flushed_way).valids(set_index) <= '1';
-        memory(index).ways(flushed_way).tag      <= get_address_tag(memory_last_requested_addr);
+        memory(index).ways(flushed_way).tag               <= get_address_tag(memory_last_requested_addr);
 
         memory(index).ways(flushed_way).data(set_index) <= i_memory_read_data;
       end if;

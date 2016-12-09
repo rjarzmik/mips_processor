@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-10
--- Last update: 2016-12-08
+-- Last update: 2016-12-09
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -154,7 +154,7 @@ begin
   begin
     if rst = '1' then
       out_pc   <= (others => 'X');
-      out_data <= (others => 'X');
+      out_data <= (others => '0');
       out_itag <= INSTR_TAG_NONE;
     elsif rising_edge(clk) then
       if kill_fetch = '1' then
