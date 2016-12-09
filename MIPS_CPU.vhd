@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-11
--- Last update: 2016-12-08
+-- Last update: 2016-12-09
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -38,19 +38,34 @@ entity MIPS_CPU is
     );
 
   port (
-    clk                      : in  std_logic;
-    rst                      : in  std_logic;
+    clk                             : in  std_logic;
+    rst                             : in  std_logic;
     -- L2 cache lines
-    o_L2c_req                : out std_logic;
-    o_L2c_addr               : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
-    i_L2c_read_data          : in  std_logic_vector(DATA_WIDTH - 1 downto 0);
-    i_L2c_valid              : in  std_logic;
+    o_L2c_req                       : out std_logic;
+    o_L2c_addr                      : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
+    i_L2c_read_data                 : in  std_logic_vector(DATA_WIDTH - 1 downto 0);
+    i_L2c_valid                     : in  std_logic;
     -- Debug signals
-    signal o_dbg_if_pc       : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
-    signal o_dbg_di_pc       : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
-    signal o_dbg_ex_pc       : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
-    signal o_dbg_wb_pc       : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
-    signal o_dbg_commited_pc : out std_logic_vector(ADDR_WIDTH - 1 downto 0)
+    signal o_dbg_if_pc              : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
+    signal o_dbg_di_pc              : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
+    signal o_dbg_ex_pc              : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
+    signal o_dbg_wb_pc              : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
+    signal o_dbg_commited_pc        : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
+    signal o_dbg_pc_killed          : out std_logic;
+    signal o_dbg_ife_killed         : out std_logic;
+    signal o_dbg_di_killed          : out std_logic;
+    signal o_dbg_ex_killed          : out std_logic;
+    signal o_dbg_wb_killed          : out std_logic;
+    signal o_dbg_pc_stalled         : out std_logic;
+    signal o_dbg_ife_stalled        : out std_logic;
+    signal o_dbg_di_stalled         : out std_logic;
+    signal o_dbg_ex_stalled         : out std_logic;
+    signal o_dbg_wb_stalled         : out std_logic;
+    signal o_dbg_jump_pc            : out std_logic;
+    signal o_dbg_jump_target        : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
+    signal o_dbg_commited_instr_tag : out instr_tag_t;
+    signal o_dbg_wb2di_reg1         : out register_port_type;
+    signal o_dbg_wb2di_reg2         : out register_port_type
     );
 
 end entity MIPS_CPU;
@@ -113,6 +128,8 @@ architecture rtl of MIPS_CPU is
   signal wb_stalled                : std_logic;
   --- Pipeline stage output killers (ie. "nop" replacement of stage output)
   signal mispredict_kills_pipeline : std_logic;
+  signal pc_killed                 : std_logic;
+  signal ife_killed                : std_logic;
   signal di_killed                 : std_logic;
   signal ex_killed                 : std_logic;
   signal wb_killed                 : std_logic;
@@ -137,7 +154,7 @@ begin  -- architecture rtl
       clk                        => clk,
       rst                        => rst,
       stall_req                  => ife_stalled,
-      kill_req                   => '0',
+      kill_req                   => ife_killed,
       o_instruction              => fetched_instruction,
       o_pc_instr                 => fetched_pc,
       o_instr_tag                => di_instr_tag,
@@ -259,16 +276,35 @@ begin  -- architecture rtl
   ex_stalled  <= '0';
   wb_stalled  <= '0';
 
-  di_killed <= mispredict_kills_pipeline or RaW_detected;
-  ex_killed <= mispredict_kills_pipeline;
-  wb_killed <= mispredict_kills_pipeline;
+  ife_killed <= '0';
+  di_killed  <= mispredict_kills_pipeline or RaW_detected;
+  ex_killed  <= mispredict_kills_pipeline;
+  wb_killed  <= mispredict_kills_pipeline;
 
   -- Debug signal
-  o_dbg_if_pc       <= dbg_if_pc;
-  o_dbg_di_pc       <= dbg_di_pc;
-  o_dbg_ex_pc       <= dbg_ex_pc;
-  o_dbg_wb_pc       <= dbg_wb_pc;
+  o_dbg_if_pc <= dbg_if_pc;
+  o_dbg_di_pc <= dbg_di_pc;
+  o_dbg_ex_pc <= dbg_ex_pc;
+  o_dbg_wb_pc <= dbg_wb_pc;
+
   o_dbg_commited_pc <= dbg_commited_pc;
+  o_dbg_pc_killed   <= pc_killed;
+  o_dbg_ife_killed  <= ife_killed;
+  o_dbg_di_killed   <= di_killed;
+  o_dbg_ex_killed   <= ex_killed;
+  o_dbg_wb_killed   <= wb_killed;
+  o_dbg_pc_stalled  <= pc_stalled;
+  o_dbg_ife_stalled <= ife_stalled;
+  o_dbg_di_stalled  <= di_stalled;
+  o_dbg_ex_stalled  <= ex_stalled;
+  o_dbg_wb_stalled  <= wb_stalled;
+
+  o_dbg_jump_pc            <= wb_is_jump;
+  o_dbg_jump_target        <= wb_jump_target;
+  o_dbg_commited_instr_tag <= commited_instr_tag;
+
+  o_dbg_wb2di_reg1 <= wb2di_reg1;
+  o_dbg_wb2di_reg2 <= wb2di_reg2;
 
 end architecture rtl;
 
