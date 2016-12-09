@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-16
--- Last update: 2016-12-08
+-- Last update: 2016-12-09
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -80,7 +80,9 @@ begin  -- architecture rtl
   -- Component instantiations
   -----------------------------------------------------------------------------
 
-  is_nop <= true when i_reg1.we = '0' and i_reg2.we = '0' and i_is_jump = '0' else false;
+  is_nop <= true when i_reg1.we = '0' and i_reg2.we = '0' and
+            not i_instr_tag.is_branch and not i_instr_tag.is_ja and
+            not i_instr_tag.is_jr else false;
 
   process(rst, clk, stall_req)
   begin
