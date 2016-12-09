@@ -1,25 +1,25 @@
 # -------------------------------------------------------------------------- #
 #
-# Copyright (C) 1991-2015 Altera Corporation. All rights reserved.
-# Your use of Altera Corporation's design tools, logic functions 
+# Copyright (C) 2016  Intel Corporation. All rights reserved.
+# Your use of Intel Corporation's design tools, logic functions 
 # and other software and tools, and its AMPP partner logic 
 # functions, and any output files from any of the foregoing 
 # (including device programming or simulation files), and any 
 # associated documentation or information are expressly subject 
-# to the terms and conditions of the Altera Program License 
-# Subscription Agreement, the Altera Quartus Prime License Agreement,
-# the Altera MegaCore Function License Agreement, or other 
+# to the terms and conditions of the Intel Program License 
+# Subscription Agreement, the Intel Quartus Prime License Agreement,
+# the Intel MegaCore Function License Agreement, or other 
 # applicable license agreement, including, without limitation, 
 # that your use is for the sole purpose of programming logic 
-# devices manufactured by Altera and sold by Altera or its 
+# devices manufactured by Intel and sold by Intel or its 
 # authorized distributors.  Please refer to the applicable 
 # agreement for further details.
 #
 # -------------------------------------------------------------------------- #
 #
 # Quartus Prime
-# Version 15.1.0 Build 185 10/21/2015 SJ Lite Edition
-# Date created = 22:14:03  November 10, 2016
+# Version 16.1.0 Build 196 10/24/2016 SJ Lite Edition
+# Date created = 00:37:47  December 10, 2016
 #
 # -------------------------------------------------------------------------- #
 #
@@ -37,22 +37,14 @@
 # -------------------------------------------------------------------------- #
 
 
-set_global_assignment -name FAMILY "Cyclone V"
-set_global_assignment -name DEVICE 5CSEMA5F31C6
-set_global_assignment -name TOP_LEVEL_ENTITY MIPS_CPU
+
+# Project-Wide Assignments
+# ========================
 set_global_assignment -name ORIGINAL_QUARTUS_VERSION 15.1.0
 set_global_assignment -name PROJECT_CREATION_TIME_DATE "22:14:03  NOVEMBER 10, 2016"
 set_global_assignment -name LAST_QUARTUS_VERSION "16.1.0 Lite Edition"
 set_global_assignment -name PROJECT_OUTPUT_DIRECTORY output_files
-set_global_assignment -name MIN_CORE_JUNCTION_TEMP 0
-set_global_assignment -name MAX_CORE_JUNCTION_TEMP 85
-set_global_assignment -name ERROR_CHECK_FREQUENCY_DIVISOR 256
-set_global_assignment -name EDA_SIMULATION_TOOL "ModelSim-Altera (VHDL)"
-set_global_assignment -name EDA_OUTPUT_DATA_FORMAT VHDL -section_id eda_simulation
-set_global_assignment -name POWER_PRESET_COOLING_SOLUTION "23 MM HEAT SINK WITH 200 LFPM AIRFLOW"
-set_global_assignment -name POWER_BOARD_THERMAL_MODEL "NONE (CONSERVATIVE)"
-set_global_assignment -name PROJECT_IP_REGENERATION_POLICY ALWAYS_REGENERATE_IP
-set_global_assignment -name EDA_TIME_SCALE "1 ns" -section_id eda_simulation
+set_global_assignment -name SMART_RECOMPILE ON
 set_global_assignment -name VHDL_FILE ProgramCounter/instruction_record.vhd
 set_global_assignment -name VHDL_FILE ProgramCounter/Instruction_Tracker.vhd
 set_global_assignment -name VHDL_FILE instruction_tag.vhd
@@ -76,13 +68,116 @@ set_global_assignment -name VHDL_FILE EX/ALU.vhd
 set_global_assignment -name VHDL_FILE WB/Writeback.vhd
 set_global_assignment -name VHDL_FILE Caches/DualPort_Cache.vhd
 set_global_assignment -name VHDL_FILE Caches/SinglePort_Cache.vhd
-set_global_assignment -name TIMEQUEST_MULTICORNER_ANALYSIS ON
-set_global_assignment -name SMART_RECOMPILE ON
 set_global_assignment -name VHDL_FILE Control/Control_Decode_Dependencies.vhd
 set_global_assignment -name VHDL_FILE Caches/SinglePort_Associative_Cache.vhd
-set_global_assignment -name PARTITION_NETLIST_TYPE SOURCE -section_id Top
-set_global_assignment -name PARTITION_FITTER_PRESERVATION_LEVEL PLACEMENT_AND_ROUTING -section_id Top
-set_global_assignment -name PARTITION_COLOR 16764057 -section_id Top
 set_global_assignment -name VHDL_FILE IF/Instruction_Provider.vhd
 set_global_assignment -name VHDL_FILE EX/ALU_Adder.vhd
-set_instance_assignment -name PARTITION_HIERARCHY root_partition -to | -section_id Top
+
+# Classic Timing Assignments
+# ==========================
+set_global_assignment -name MIN_CORE_JUNCTION_TEMP 0
+set_global_assignment -name MAX_CORE_JUNCTION_TEMP 85
+set_global_assignment -name TIMEQUEST_MULTICORNER_ANALYSIS ON
+
+# Analysis & Synthesis Assignments
+# ================================
+set_global_assignment -name FAMILY "Cyclone V"
+set_global_assignment -name TOP_LEVEL_ENTITY MIPS_CPU
+set_global_assignment -name PROJECT_IP_REGENERATION_POLICY ALWAYS_REGENERATE_IP
+set_global_assignment -name EDA_DESIGN_ENTRY_SYNTHESIS_TOOL "<None>"
+set_global_assignment -name VHDL_INPUT_VERSION VHDL_2008
+set_global_assignment -name VHDL_SHOW_LMF_MAPPING_MESSAGES OFF
+
+# Fitter Assignments
+# ==================
+set_global_assignment -name DEVICE 5CSEMA5F31C6
+set_global_assignment -name ERROR_CHECK_FREQUENCY_DIVISOR 256
+set_global_assignment -name ENABLE_CONFIGURATION_PINS OFF
+set_global_assignment -name ENABLE_BOOT_SEL_PIN OFF
+set_global_assignment -name STRATIXV_CONFIGURATION_SCHEME "PASSIVE SERIAL"
+set_global_assignment -name CRC_ERROR_OPEN_DRAIN ON
+set_global_assignment -name RESERVE_ALL_UNUSED_PINS_WEAK_PULLUP "AS INPUT TRI-STATED"
+set_global_assignment -name ACTIVE_SERIAL_CLOCK FREQ_100MHZ
+
+# EDA Netlist Writer Assignments
+# ==============================
+set_global_assignment -name EDA_SIMULATION_TOOL "ModelSim-Altera (VHDL)"
+
+# Assembler Assignments
+# =====================
+set_global_assignment -name ENABLE_OCT_DONE OFF
+set_global_assignment -name USE_CONFIGURATION_DEVICE ON
+
+# Power Estimation Assignments
+# ============================
+set_global_assignment -name POWER_PRESET_COOLING_SOLUTION "23 MM HEAT SINK WITH 200 LFPM AIRFLOW"
+set_global_assignment -name POWER_BOARD_THERMAL_MODEL "NONE (CONSERVATIVE)"
+
+# Advanced I/O Timing Assignments
+# ===============================
+set_global_assignment -name OUTPUT_IO_TIMING_NEAR_END_VMEAS "HALF VCCIO" -rise
+set_global_assignment -name OUTPUT_IO_TIMING_NEAR_END_VMEAS "HALF VCCIO" -fall
+set_global_assignment -name OUTPUT_IO_TIMING_FAR_END_VMEAS "HALF SIGNAL SWING" -rise
+set_global_assignment -name OUTPUT_IO_TIMING_FAR_END_VMEAS "HALF SIGNAL SWING" -fall
+
+# start EDA_TOOL_SETTINGS(eda_simulation)
+# ---------------------------------------
+
+	# EDA Netlist Writer Assignments
+	# ==============================
+	set_global_assignment -name EDA_OUTPUT_DATA_FORMAT VHDL -section_id eda_simulation
+	set_global_assignment -name EDA_TIME_SCALE "1 ns" -section_id eda_simulation
+
+# end EDA_TOOL_SETTINGS(eda_simulation)
+# -------------------------------------
+
+# ----------------------
+# start ENTITY(MIPS_CPU)
+
+	# Pin & Location Assignments
+	# ==========================
+	set_instance_assignment -name VIRTUAL_PIN ON -to o_dbg_di_killed
+	set_instance_assignment -name VIRTUAL_PIN ON -to o_dbg_commited_instr_tag.is_branch
+	set_instance_assignment -name VIRTUAL_PIN ON -to o_dbg_commited_instr_tag.is_branch_taken
+	set_instance_assignment -name VIRTUAL_PIN ON -to o_dbg_commited_instr_tag.is_ja
+	set_instance_assignment -name VIRTUAL_PIN ON -to o_dbg_commited_instr_tag.is_jr
+	set_instance_assignment -name VIRTUAL_PIN ON -to o_dbg_commited_instr_tag.valid
+	set_instance_assignment -name VIRTUAL_PIN ON -to o_dbg_di_stalled
+	set_instance_assignment -name VIRTUAL_PIN ON -to o_dbg_ex_killed
+	set_instance_assignment -name VIRTUAL_PIN ON -to o_dbg_ex_stalled
+	set_instance_assignment -name VIRTUAL_PIN ON -to o_dbg_ife_killed
+	set_instance_assignment -name VIRTUAL_PIN ON -to o_dbg_ife_stalled
+	set_instance_assignment -name VIRTUAL_PIN ON -to o_dbg_jump_pc
+	set_instance_assignment -name VIRTUAL_PIN ON -to o_dbg_pc_killed
+	set_instance_assignment -name VIRTUAL_PIN ON -to o_dbg_pc_stalled
+	set_instance_assignment -name VIRTUAL_PIN ON -to o_dbg_wb2di_reg1.we
+	set_instance_assignment -name VIRTUAL_PIN ON -to o_dbg_wb2di_reg2.we
+	set_instance_assignment -name VIRTUAL_PIN ON -to o_dbg_wb_killed
+	set_instance_assignment -name VIRTUAL_PIN ON -to o_dbg_wb_stalled
+	set_instance_assignment -name VIRTUAL_PIN ON -to o_dbg_commited_instr_tag.tag
+	set_instance_assignment -name VIRTUAL_PIN ON -to o_dbg_commited_pc
+	set_instance_assignment -name VIRTUAL_PIN ON -to o_dbg_di_pc
+	set_instance_assignment -name VIRTUAL_PIN ON -to o_dbg_ex_pc
+	set_instance_assignment -name VIRTUAL_PIN ON -to o_dbg_if_pc
+	set_instance_assignment -name VIRTUAL_PIN ON -to o_dbg_jump_target
+	set_instance_assignment -name VIRTUAL_PIN ON -to o_dbg_wb2di_reg1.data
+	set_instance_assignment -name VIRTUAL_PIN ON -to o_dbg_wb2di_reg1.idx
+	set_instance_assignment -name VIRTUAL_PIN ON -to o_dbg_wb2di_reg2.data
+	set_instance_assignment -name VIRTUAL_PIN ON -to o_dbg_wb2di_reg2.idx
+	set_instance_assignment -name VIRTUAL_PIN ON -to o_dbg_wb_pc
+
+	# start DESIGN_PARTITION(Top)
+	# ---------------------------
+
+		# Incremental Compilation Assignments
+		# ===================================
+		set_global_assignment -name PARTITION_NETLIST_TYPE SOURCE -section_id Top
+		set_global_assignment -name PARTITION_FITTER_PRESERVATION_LEVEL PLACEMENT_AND_ROUTING -section_id Top
+		set_global_assignment -name PARTITION_COLOR 16764057 -section_id Top
+		set_instance_assignment -name PARTITION_HIERARCHY root_partition -to | -section_id Top
+
+	# end DESIGN_PARTITION(Top)
+	# -------------------------
+
+# end ENTITY(MIPS_CPU)
+# --------------------
