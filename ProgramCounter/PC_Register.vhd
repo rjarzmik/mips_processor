@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-13
--- Last update: 2016-12-10
+-- Last update: 2016-12-11
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -78,7 +78,7 @@ architecture rtl of PC_Register is
   signal pc_instr_tag      : instr_tag_t;
   signal pc_next           : std_logic_vector(ADDR_WIDTH - 1 downto 0);
   signal pc_next_instr_tag : instr_tag_t;
-  signal pc_next_stepped   : std_logic_vector(ADDR_WIDTH - 1 downto 0);
+  signal pc_next_next      : std_logic_vector(ADDR_WIDTH - 1 downto 0);
 
   --- Instruction tracker
   signal instr_tag             : instr_tag_t;
@@ -88,7 +88,16 @@ architecture rtl of PC_Register is
   signal commited_instr_tag    : instr_tag_t;
 
   --- Instruction misprediction tracker
-  signal mispredict_correct_pc : std_logic_vector(ADDR_WIDTH - 1 downto 0);
+  signal mispredicted                            : std_logic;
+  signal mispredict_correct_pc                   : std_logic_vector(ADDR_WIDTH - 1 downto 0);
+  signal mispredict_wrongly_taken_branch         : boolean;
+  signal mispredict_wrongly_not_taken_branch     : boolean;
+  signal mispredict_wrongly_taken_jump           : boolean;
+  signal mispredict_wrongly_not_taken_jump       : boolean;
+  signal mispredict_wrongly_pc_disrupt           : boolean;
+  signal mispredict_wrongly_predicted_is_branch  : boolean;
+  signal mispredict_wrongly_predicted_is_jump    : boolean;
+  signal mispredict_wrongly_predicted_is_stepped : boolean;
 
 --- Jump internal signals
 begin  -- architecture rtl
@@ -96,14 +105,6 @@ begin  -- architecture rtl
   -----------------------------------------------------------------------------
   -- Component instantiations
   -----------------------------------------------------------------------------
-  pc_next_add4 : PC_Adder
-    generic map (
-      ADDR_WIDTH => ADDR_WIDTH,
-      STEP       => STEP)
-    port map (
-      current_pc => pc_next,
-      next_pc    => pc_next_stepped);
-
   itracker : entity work.Instruction_Tracker
     generic map (
       ADDR_WIDTH => ADDR_WIDTH)
@@ -117,7 +118,7 @@ begin  -- architecture rtl
       i_pc1_instr_tag         => pc_instr_tag,
       i_pc2_instr_tag         => pc_next_instr_tag,
       i_pc1_predict_next_pc   => pc_next,
-      i_pc2_predict_next_pc   => pc_next_stepped,
+      i_pc2_predict_next_pc   => pc_next_next,
       i_commited_instr_tag    => i_commited_instr_tag,
       i_jump_target           => jump_target,
       o_commited_instr_record => commited_instr_record,
@@ -130,88 +131,66 @@ begin  -- architecture rtl
       ADDR_WIDTH => ADDR_WIDTH,
       STEP       => STEP)
     port map (
-      clk                     => clk,
-      rst                     => rst,
-      i_commited_instr_record => commited_instr_record,
-      i_commited_instr_tag    => commited_instr_tag,
-      i_commited_jump_target  => jump_target,
-      o_mispredict            => o_mispredicted,
-      o_mispredict_correct_pc => mispredict_correct_pc);
+      clk                            => clk,
+      rst                            => rst,
+      i_commited_instr_record        => commited_instr_record,
+      i_commited_instr_tag           => commited_instr_tag,
+      i_commited_jump_target         => jump_target,
+      o_mispredict                   => mispredicted,
+      o_mispredict_correct_pc        => mispredict_correct_pc,
+      o_wrongly_taken_branch         => mispredict_wrongly_taken_branch,
+      o_wrongly_not_taken_branch     => mispredict_wrongly_not_taken_branch,
+      o_wrongly_taken_jump           => mispredict_wrongly_taken_jump,
+      o_wrongly_not_taken_jump       => mispredict_wrongly_not_taken_jump,
+      o_wrongly_pc_disrupt           => mispredict_wrongly_pc_disrupt,
+      o_wrongly_predicted_is_branch  => mispredict_wrongly_predicted_is_branch,
+      o_wrongly_predicted_is_jump    => mispredict_wrongly_predicted_is_jump,
+      o_wrongly_predicted_is_stepped => mispredict_wrongly_predicted_is_stepped
+      );
 
-  process(clk, rst) is
-    variable jump_recorded_valid          : boolean := false;
-    variable jump_recorded_target         : std_logic_vector(ADDR_WIDTH - 1 downto 0);
-    variable jump_recorded_target_stepped : std_logic_vector(ADDR_WIDTH - 1 downto 0);
-    variable jump_recorded_itag           : instr_tag_t;
-  begin
-    if rst = '1' then
-      pc                 <= std_logic_vector(to_signed(0, ADDR_WIDTH));
-      pc_next            <= std_logic_vector(to_signed(4, ADDR_WIDTH));
-      pc_instr_tag       <= INSTR_TAG_FIRST_VALID;
-      pc_next_instr_tag  <= get_next_instr_tag(INSTR_TAG_FIRST_VALID, 1);
-      update_next_instr_tag(get_next_instr_tag(INSTR_TAG_FIRST_VALID, 1), instr_tag);
-      itrack_req_pc      <= '1';
-      itrack_req_pc_next <= '1';
-    elsif rising_edge(clk) then
-      if jump_pc = '1' then
-        jump_recorded_valid  := true;
-        jump_recorded_target := jump_target;
-        jump_recorded_itag   := i_commited_instr_tag;
-      end if;
-
-      if stall_pc = '0' then
-        if jump_recorded_valid then
-          pc <= jump_recorded_target;
-          pc_instr_tag <=
-            get_instr_change_is_branch(
-              get_instr_change_is_branch_taken(
-                get_next_instr_tag(instr_tag, 1),
-                false),
-              false);
-          pc_next <= std_logic_vector(unsigned(jump_recorded_target) + STEP);
-          pc_next_instr_tag <=
-            get_instr_change_is_branch(
-              get_instr_change_is_branch_taken(
-                get_next_instr_tag(instr_tag, 2),
-                false),
-              false);
-
-          update_next_instr_tag(get_next_instr_tag(instr_tag, 2), instr_tag);
-          itrack_req_pc        <= '1';
-          itrack_req_pc_next   <= '1';
-          jump_recorded_valid  := false;
-          jump_recorded_target := (others => 'X');
-        else
-          pc           <= pc_next;
-          pc_instr_tag <= pc_next_instr_tag;
-          pc_next      <= pc_next_stepped;
-          pc_next_instr_tag <=
-            get_instr_change_is_branch(
-              get_instr_change_is_branch_taken(
-                get_next_instr_tag(instr_tag, 1),
-                false),
-              false);
-
-          update_next_instr_tag(get_next_instr_tag(instr_tag, 1), instr_tag);
-          itrack_req_pc      <= '0';
-          itrack_req_pc_next <= '1';
-        end if;
-      else
-        itrack_req_pc      <= '0';
-        itrack_req_pc_next <= '0';
-      end if;
-    end if;
-  end process;
+  predictor : entity work.PC_Predictor
+    generic map (
+      ADDR_WIDTH     => ADDR_WIDTH,
+      STEP           => STEP,
+      NB_PREDICTIONS => 4)
+    port map (
+      clk                            => clk,
+      rst                            => rst,
+      stall_req                      => stall_pc,
+      o_itrack_req_pc1               => itrack_req_pc,
+      o_itrack_req_pc2               => itrack_req_pc_next,
+      -- o_itrack_pc1                   => o_itrack_pc1,
+      -- o_itrack_pc2                   => o_itrack_pc2,
+      -- o_itrack_pc1_instr_tag         => pc_instr_tag,
+      -- o_itrack_pc2_instr_tag         => pc_next_instr_tag,
+      i_commited_instr_record        => commited_instr_record,
+      i_commited_instr_tag           => commited_instr_tag,
+      i_commited_jump_target         => jump_target,
+      i_mispredict                   => mispredicted,
+      i_mispredict_correct_pc        => mispredict_correct_pc,
+      i_wrongly_taken_branch         => mispredict_wrongly_taken_branch,
+      i_wrongly_not_taken_branch     => mispredict_wrongly_not_taken_branch,
+      i_wrongly_taken_jump           => mispredict_wrongly_taken_jump,
+      i_wrongly_not_taken_jump       => mispredict_wrongly_not_taken_jump,
+      i_wrongly_predicted_is_branch  => mispredict_wrongly_predicted_is_branch,
+      i_wrongly_predicted_is_jump    => mispredict_wrongly_predicted_is_jump,
+      i_wrongly_predicted_is_stepped => mispredict_wrongly_predicted_is_stepped,
+      o_pc                           => pc,
+      o_pc_instr_tag                 => pc_instr_tag,
+      o_next_pc                      => pc_next,
+      o_next_pc_instr_tag            => pc_next_instr_tag,
+      o_next_next_pc                 => pc_next_next);
 
   --- Outputs
   o_current_pc           <= pc;
   o_current_pc_instr_tag <= pc_instr_tag;
   o_next_pc              <= pc_next;
   o_next_pc_instr_tag    <= pc_next_instr_tag;
+  o_mispredicted         <= mispredicted;
 
   --- Misprediction
   --- When fetch mispredicted, signal to kill the pipeline
-  --- This is now handled by the instruction tracker
+  --- This is now handled by the misprediction entity
 
 end architecture rtl;
 
