@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-12
--- Last update: 2016-12-09
+-- Last update: 2016-12-10
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -25,6 +25,7 @@ use ieee.numeric_std.all;
 
 use work.cpu_defs.all;
 use work.instruction_defs.instr_tag_t;
+use work.instruction_defs.INSTR_TAG_FIRST_VALID;
 
 -------------------------------------------------------------------------------
 
@@ -70,15 +71,22 @@ architecture rtl of MIPS_CPU_tb is
   signal dbg_ex_stalled  : std_logic;
   signal dbg_wb_stalled  : std_logic;
 
-  signal dbg_jump_pc            : std_logic;
-  signal dbg_jump_target        : std_logic_vector(ADDR_WIDTH - 1 downto 0);
-  signal dbg_commited_instr_tag : instr_tag_t;
+  signal dbg_jump_pc     : std_logic;
+  signal dbg_jump_target : std_logic_vector(ADDR_WIDTH - 1 downto 0);
 
   signal dbg_wb2di_reg1 : register_port_type;
   signal dbg_wb2di_reg2 : register_port_type;
 
+  signal dbg_if_itag       : instr_tag_t;
+  signal dbg_di_itag       : instr_tag_t;
+  signal dbg_ex_itag       : instr_tag_t;
+  signal dbg_wb_itag       : instr_tag_t;
+  signal dbg_commited_itag : instr_tag_t;
+
+
   function dbg_get_stage_letter(
-    rst : std_logic; kill : std_logic; stall : std_logic)
+    rst    : std_logic; kill : std_logic; stall : std_logic;
+    itag  : instr_tag_t)
     return string is
     variable o : string(1 to 1);
   begin
@@ -88,8 +96,10 @@ architecture rtl of MIPS_CPU_tb is
       o := "K";
     elsif stall = '1' then
       o := "S";
-    else
+    elsif not itag.valid then
       o := "-";
+    else
+      o := integer'image(itag.tag);
     end if;
     return o;
   end function dbg_get_stage_letter;
@@ -97,15 +107,17 @@ architecture rtl of MIPS_CPU_tb is
   function dbg_get_stage_string(
     stage : string;
     rst   : std_logic; kill : std_logic; stall : std_logic;
-    pc    : std_logic_vector(ADDR_WIDTH - 1 downto 0)) return string is
+    pc    : std_logic_vector(ADDR_WIDTH - 1 downto 0);
+    itag  : instr_tag_t) return string is
     constant length : integer := stage'length + 4;
     variable head   : string(1 to length);
   begin
     head(1 to stage'length) := stage;
     head(stage'length + 1)  := '(';
     head(stage'length + 2 to stage'length + 2) :=
-      dbg_get_stage_letter(rst, kill, stall);
+      dbg_get_stage_letter(rst, kill, stall, itag);
     head(stage'length + 3 to stage'length + 4) := ")@";
+
     return head & to_hstring(pc);
   end function dbg_get_stage_string;
 
@@ -243,9 +255,13 @@ begin  -- architecture rtl
       o_dbg_wb_stalled         => dbg_wb_stalled,
       o_dbg_jump_pc            => dbg_jump_pc,
       o_dbg_jump_target        => dbg_jump_target,
-      o_dbg_commited_instr_tag => dbg_commited_instr_tag,
+      o_dbg_commited_instr_tag => dbg_commited_itag,
       o_dbg_wb2di_reg1         => dbg_wb2di_reg1,
-      o_dbg_wb2di_reg2         => dbg_wb2di_reg2
+      o_dbg_wb2di_reg2         => dbg_wb2di_reg2,
+      o_dbg_if_instr_tag       => dbg_if_itag,
+      o_dbg_di_instr_tag       => dbg_di_itag,
+      o_dbg_ex_instr_tag       => dbg_ex_itag,
+      o_dbg_wb_instr_tag       => dbg_wb_itag
       );
 
   Simulated_Memory_1 : entity work.Simulated_Memory
@@ -291,11 +307,11 @@ begin  -- architecture rtl
     if rising_edge(clk) then
       cycle := cycle + 1;
       report "[" & integer'image(cycle) & "] " &
-        dbg_get_stage_string("if", rst, fkill, dbg_ife_stalled, dbg_if_pc) & " " &
-        dbg_get_stage_string("di", rst, dbg_di_killed, dbg_di_stalled, dbg_di_pc) & " " &
-        dbg_get_stage_string("ex", rst, dbg_ex_killed, dbg_ex_stalled, dbg_ex_pc) & " " &
-        dbg_get_stage_string("wb", rst, dbg_wb_killed, dbg_wb_stalled, dbg_wb_pc) & " " &
-        dbg_get_done_string("done", rst, dbg_commited_instr_tag, dbg_commited_pc) & " " &
+        dbg_get_stage_string("if", rst, fkill, dbg_ife_stalled, dbg_if_pc, dbg_if_itag) & " " &
+        dbg_get_stage_string("di", rst, dbg_di_killed, dbg_di_stalled, dbg_di_pc, dbg_di_itag) & " " &
+        dbg_get_stage_string("ex", rst, dbg_ex_killed, dbg_ex_stalled, dbg_ex_pc, dbg_ex_itag) & " " &
+        dbg_get_stage_string("wb", rst, dbg_wb_killed, dbg_wb_stalled, dbg_wb_pc, dbg_wb_itag) & " " &
+        dbg_get_done_string("done", rst, dbg_commited_itag, dbg_commited_pc) & " " &
         dbg_get_regwrite_string(dbg_wb2di_reg1) &
         dbg_get_regwrite_string(dbg_wb2di_reg2) &
         dbg_get_jump_string(dbg_jump_pc, dbg_jump_target);

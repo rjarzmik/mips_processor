@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-12-03
--- Last update: 2016-12-07
+-- Last update: 2016-12-10
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -62,7 +62,8 @@ entity Instruction_Provider is
     i_L2c_valid              : in  std_logic;
     -- Debug signal
     --- Current fetching address accessed in the instruction cache
-    o_dbg_fetching           : out std_logic_vector(ADDR_WIDTH - 1 downto 0)
+    o_dbg_fetching           : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
+    o_dbg_fetching_itag      : out instr_tag_t
     );
 
 end entity Instruction_Provider;
@@ -198,6 +199,7 @@ begin  -- architecture str
 
   --- Debug output
   o_dbg_fetching <= cache_query_addr;
+  o_dbg_fetching_itag <= cache_query_itag;
 
 -----------------------------------------------------------------------------
 -- Component instantiations

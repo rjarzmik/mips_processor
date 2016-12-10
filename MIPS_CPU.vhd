@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-11
--- Last update: 2016-12-09
+-- Last update: 2016-12-10
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -65,7 +65,11 @@ entity MIPS_CPU is
     signal o_dbg_jump_target        : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
     signal o_dbg_commited_instr_tag : out instr_tag_t;
     signal o_dbg_wb2di_reg1         : out register_port_type;
-    signal o_dbg_wb2di_reg2         : out register_port_type
+    signal o_dbg_wb2di_reg2         : out register_port_type;
+    signal o_dbg_if_instr_tag       : out instr_tag_t;
+    signal o_dbg_di_instr_tag       : out instr_tag_t;
+    signal o_dbg_ex_instr_tag       : out instr_tag_t;
+    signal o_dbg_wb_instr_tag       : out instr_tag_t
     );
 
 end entity MIPS_CPU;
@@ -83,6 +87,7 @@ architecture rtl of MIPS_CPU is
   signal fetched_instruction : std_logic_vector(DATA_WIDTH - 1 downto 0);
   signal fetched_pc          : std_logic_vector(DATA_WIDTH - 1 downto 0);
   signal fetch_stalls_pc     : std_logic;
+  signal if_instr_tag        : instr_tag_t;
   signal di_instr_tag        : instr_tag_t;
   signal alu_op              : alu_op_type;
   signal di2ex_ra            : std_logic_vector(DATA_WIDTH - 1 downto 0);
@@ -151,23 +156,24 @@ begin  -- architecture rtl
       ADDR_WIDTH => ADDR_WIDTH,
       DATA_WIDTH => DATA_WIDTH)
     port map (
-      clk                        => clk,
-      rst                        => rst,
-      stall_req                  => ife_stalled,
-      kill_req                   => ife_killed,
-      o_instruction              => fetched_instruction,
-      o_pc_instr                 => fetched_pc,
-      o_instr_tag                => di_instr_tag,
-      o_mispredict_kill_pipeline => mispredict_kills_pipeline,
-      o_L2c_req                  => o_L2c_req,
-      o_L2c_addr                 => o_L2c_addr,
-      i_L2c_read_data            => i_L2c_read_data,
-      i_L2c_valid                => i_L2c_valid,
-      i_is_jump                  => wb_is_jump,
-      i_jump_target              => wb_jump_target,
-      i_commited_instr_tag       => commited_instr_tag,
-      o_dbg_if_fetching_pc       => dbg_if_pc,
-      o_dbg_if_pc                => dbg_di_pc);
+      clk                         => clk,
+      rst                         => rst,
+      stall_req                   => ife_stalled,
+      kill_req                    => ife_killed,
+      o_instruction               => fetched_instruction,
+      o_pc_instr                  => fetched_pc,
+      o_instr_tag                 => di_instr_tag,
+      o_mispredict_kill_pipeline  => mispredict_kills_pipeline,
+      o_L2c_req                   => o_L2c_req,
+      o_L2c_addr                  => o_L2c_addr,
+      i_L2c_read_data             => i_L2c_read_data,
+      i_L2c_valid                 => i_L2c_valid,
+      i_is_jump                   => wb_is_jump,
+      i_jump_target               => wb_jump_target,
+      i_commited_instr_tag        => commited_instr_tag,
+      o_dbg_if_fetching_pc        => dbg_if_pc,
+      o_dbg_if_pc                 => dbg_di_pc,
+      o_dbg_if_fetching_instr_tag => if_instr_tag);
 
   di : entity work.Decode
     generic map (
@@ -276,7 +282,7 @@ begin  -- architecture rtl
   ex_stalled  <= '0';
   wb_stalled  <= '0';
 
-  ife_killed <= '0';
+  ife_killed <= mispredict_kills_pipeline;
   di_killed  <= mispredict_kills_pipeline or RaW_detected;
   ex_killed  <= mispredict_kills_pipeline;
   wb_killed  <= mispredict_kills_pipeline;
@@ -305,6 +311,11 @@ begin  -- architecture rtl
 
   o_dbg_wb2di_reg1 <= wb2di_reg1;
   o_dbg_wb2di_reg2 <= wb2di_reg2;
+
+  o_dbg_if_instr_tag <= if_instr_tag;
+  o_dbg_di_instr_tag <= di_instr_tag;
+  o_dbg_ex_instr_tag <= ex_instr_tag;
+  o_dbg_wb_instr_tag <= wb_instr_tag;
 
 end architecture rtl;
 

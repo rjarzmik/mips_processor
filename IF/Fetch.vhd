@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-10
--- Last update: 2016-12-09
+-- Last update: 2016-12-10
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -42,22 +42,23 @@ entity Fetch is
     stall_req : in std_logic;           -- stall current instruction
     kill_req  : in std_logic;           -- kill current instruction
 
-    o_pc_instr                 : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
-    o_instruction              : out std_logic_vector(DATA_WIDTH - 1 downto 0);
-    o_instr_tag                : out instr_tag_t;
-    o_mispredict_kill_pipeline : out std_logic;
+    o_pc_instr                  : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
+    o_instruction               : out std_logic_vector(DATA_WIDTH - 1 downto 0);
+    o_instr_tag                 : out instr_tag_t;
+    o_mispredict_kill_pipeline  : out std_logic;
     -- L2 connections
-    o_L2c_req                  : out std_logic;
-    o_L2c_addr                 : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
-    i_L2c_read_data            : in  std_logic_vector(DATA_WIDTH - 1 downto 0);
-    i_L2c_valid                : in  std_logic;
+    o_L2c_req                   : out std_logic;
+    o_L2c_addr                  : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
+    i_L2c_read_data             : in  std_logic_vector(DATA_WIDTH - 1 downto 0);
+    i_L2c_valid                 : in  std_logic;
     -- Writeback feedback signals
-    i_is_jump                  : in  std_logic;
-    i_jump_target              : in  std_logic_vector(ADDR_WIDTH - 1 downto 0);
-    i_commited_instr_tag       : in  instr_tag_t;
+    i_is_jump                   : in  std_logic;
+    i_jump_target               : in  std_logic_vector(ADDR_WIDTH - 1 downto 0);
+    i_commited_instr_tag        : in  instr_tag_t;
     -- Debug signals
-    o_dbg_if_pc                : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
-    o_dbg_if_fetching_pc       : out std_logic_vector(ADDR_WIDTH - 1 downto 0)
+    o_dbg_if_pc                 : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
+    o_dbg_if_fetching_pc        : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
+    o_dbg_if_fetching_instr_tag : out instr_tag_t
     );
 
 end entity Fetch;
@@ -82,12 +83,13 @@ architecture rtl3 of Fetch is
   signal pcprovider_mispredicted      : std_logic;
 
   --- Signals from instruction provider
-  signal iprovider_pc           : addr_t;
-  signal iprovider_pc_instr_tag : instr_tag_t;
-  signal iprovider_data         : data_t;
-  signal iprovider_data_valid   : std_logic;
-  signal iprovider_do_step_pc   : std_logic;
-  signal dbg_iprovider_fetching : addr_t;
+  signal iprovider_pc                : addr_t;
+  signal iprovider_pc_instr_tag      : instr_tag_t;
+  signal iprovider_data              : data_t;
+  signal iprovider_data_valid        : std_logic;
+  signal iprovider_do_step_pc        : std_logic;
+  signal dbg_iprovider_fetching      : addr_t;
+  signal dbg_iprovider_fetching_itag : instr_tag_t;
 
   --- Outgoing to next pipeline stage instruction
   signal out_pc   : addr_t;
@@ -117,7 +119,8 @@ begin
       o_L2c_addr               => o_L2c_addr,
       i_L2c_read_data          => i_L2c_read_data,
       i_L2c_valid              => i_L2c_valid,
-      o_dbg_fetching           => dbg_iprovider_fetching);
+      o_dbg_fetching           => dbg_iprovider_fetching,
+      o_dbg_fetching_itag      => dbg_iprovider_fetching_itag);
 
   pc_reg : entity work.PC_Register
     generic map (
@@ -140,7 +143,7 @@ begin
   do_stall_pc <= '1' when iprovider_do_step_pc = '0' else '0';
 
   --- PC jump handler
-  kill_fetch <= kill_req or i_is_jump;
+  kill_fetch <= kill_req;               --RJK or i_is_jump;
 
   --- When PC program mispredicted, signal to kill the pipeline
   o_mispredict_kill_pipeline <= pcprovider_mispredicted;
@@ -177,7 +180,8 @@ begin
   end process fetch_outputs_latcher;
 
   --- Debug signals
-  o_dbg_if_pc          <= out_pc;
-  o_dbg_if_fetching_pc <= dbg_iprovider_fetching;
+  o_dbg_if_pc                 <= out_pc;
+  o_dbg_if_fetching_pc        <= dbg_iprovider_fetching;
+  o_dbg_if_fetching_instr_tag <= dbg_iprovider_fetching_itag;
 
 end architecture rtl3;
