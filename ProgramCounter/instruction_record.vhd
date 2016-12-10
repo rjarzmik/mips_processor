@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-12-07
--- Last update: 2016-12-07
+-- Last update: 2016-12-10
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -34,7 +34,10 @@ package instruction_record is
 
   type instr_record is record
     pc                  : addr_t;
+    predict_next_pc     : addr_t;
     predict_is_branch   : boolean;
+    predict_is_ja       : boolean;
+    predict_is_jr       : boolean;
     predict_take_branch : boolean;
     commited            : boolean;
     commit_is_branch    : boolean;
@@ -46,8 +49,10 @@ package instruction_record is
   function get_record(itag : in instr_tag_t; irecords : in instr_records)
     return instr_record;
 
-  procedure record_one_instr(signal pc    : in  addr_t; signal itag : in instr_tag_t;
-                             signal itags : out instr_records);
+  procedure record_one_instr(signal pc              : in  addr_t;
+                             signal predict_next_pc : in  addr_t;
+                             signal itag            : in  instr_tag_t;
+                             signal itags           : out instr_records);
 
   procedure retire_one_instr(signal itag  : in  instr_tag_t;
                              signal itags : out instr_records);
@@ -55,7 +60,7 @@ package instruction_record is
 end package instruction_record;
 
 package body instruction_record is
-  function get_record(itag : in instr_tag_t;
+  function get_record(itag     : in instr_tag_t;
                       irecords : in instr_records)
     return instr_record is
     variable o : instr_record;
@@ -64,12 +69,17 @@ package body instruction_record is
     return o;
   end function get_record;
 
-  procedure record_one_instr(signal pc    : in  addr_t; signal itag : in instr_tag_t;
-                             signal itags : out instr_records) is
+  procedure record_one_instr(signal pc              : in  addr_t;
+                             signal predict_next_pc : in  addr_t;
+                             signal itag            : in  instr_tag_t;
+                             signal itags           : out instr_records) is
   begin
     itags(itag.tag) <=
       (pc                  => pc,
+       predict_next_pc     => predict_next_pc,
        predict_is_branch   => itag.is_branch,
+       predict_is_ja       => itag.is_ja,
+       predict_is_jr       => itag.is_jr,
        predict_take_branch => itag.is_branch_taken,
        commited            => false,
        commit_is_branch    => false,

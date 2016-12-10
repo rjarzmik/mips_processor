@@ -19,7 +19,7 @@
 #
 # Quartus Prime
 # Version 16.1.0 Build 196 10/24/2016 SJ Lite Edition
-# Date created = 00:37:47  December 10, 2016
+# Date created = 16:02:26  December 10, 2016
 #
 # -------------------------------------------------------------------------- #
 #
@@ -45,6 +45,7 @@ set_global_assignment -name PROJECT_CREATION_TIME_DATE "22:14:03  NOVEMBER 10, 2
 set_global_assignment -name LAST_QUARTUS_VERSION "16.1.0 Lite Edition"
 set_global_assignment -name PROJECT_OUTPUT_DIRECTORY output_files
 set_global_assignment -name SMART_RECOMPILE ON
+set_global_assignment -name VHDL_FILE ProgramCounter/Instruction_Misprediction.vhd
 set_global_assignment -name VHDL_FILE ProgramCounter/instruction_record.vhd
 set_global_assignment -name VHDL_FILE ProgramCounter/Instruction_Tracker.vhd
 set_global_assignment -name VHDL_FILE instruction_tag.vhd
@@ -87,6 +88,7 @@ set_global_assignment -name PROJECT_IP_REGENERATION_POLICY ALWAYS_REGENERATE_IP
 set_global_assignment -name EDA_DESIGN_ENTRY_SYNTHESIS_TOOL "<None>"
 set_global_assignment -name VHDL_INPUT_VERSION VHDL_2008
 set_global_assignment -name VHDL_SHOW_LMF_MAPPING_MESSAGES OFF
+set_global_assignment -name TOP_LEVEL_ENTITY MIPS_CPU
 
 # Fitter Assignments
 # ==================
@@ -165,6 +167,29 @@ set_global_assignment -name OUTPUT_IO_TIMING_FAR_END_VMEAS "HALF SIGNAL SWING" -
 	set_instance_assignment -name VIRTUAL_PIN ON -to o_dbg_wb2di_reg2.data
 	set_instance_assignment -name VIRTUAL_PIN ON -to o_dbg_wb2di_reg2.idx
 	set_instance_assignment -name VIRTUAL_PIN ON -to o_dbg_wb_pc
+	set_instance_assignment -name VIRTUAL_PIN ON -to o_dbg_di_instr_tag.is_branch_taken
+	set_instance_assignment -name VIRTUAL_PIN ON -to o_dbg_di_instr_tag.is_ja
+	set_instance_assignment -name VIRTUAL_PIN ON -to o_dbg_di_instr_tag.is_jr
+	set_instance_assignment -name VIRTUAL_PIN ON -to o_dbg_di_instr_tag.valid
+	set_instance_assignment -name VIRTUAL_PIN ON -to o_dbg_ex_instr_tag.is_branch
+	set_instance_assignment -name VIRTUAL_PIN ON -to o_dbg_ex_instr_tag.is_branch_taken
+	set_instance_assignment -name VIRTUAL_PIN ON -to o_dbg_ex_instr_tag.is_ja
+	set_instance_assignment -name VIRTUAL_PIN ON -to o_dbg_ex_instr_tag.is_jr
+	set_instance_assignment -name VIRTUAL_PIN ON -to o_dbg_ex_instr_tag.valid
+	set_instance_assignment -name VIRTUAL_PIN ON -to o_dbg_if_instr_tag.is_branch
+	set_instance_assignment -name VIRTUAL_PIN ON -to o_dbg_if_instr_tag.is_branch_taken
+	set_instance_assignment -name VIRTUAL_PIN ON -to o_dbg_if_instr_tag.is_ja
+	set_instance_assignment -name VIRTUAL_PIN ON -to o_dbg_if_instr_tag.is_jr
+	set_instance_assignment -name VIRTUAL_PIN ON -to o_dbg_if_instr_tag.valid
+	set_instance_assignment -name VIRTUAL_PIN ON -to o_dbg_wb_instr_tag.is_branch
+	set_instance_assignment -name VIRTUAL_PIN ON -to o_dbg_wb_instr_tag.is_branch_taken
+	set_instance_assignment -name VIRTUAL_PIN ON -to o_dbg_wb_instr_tag.is_ja
+	set_instance_assignment -name VIRTUAL_PIN ON -to o_dbg_wb_instr_tag.is_jr
+	set_instance_assignment -name VIRTUAL_PIN ON -to o_dbg_wb_instr_tag.valid
+	set_instance_assignment -name VIRTUAL_PIN ON -to o_dbg_di_instr_tag.tag
+	set_instance_assignment -name VIRTUAL_PIN ON -to o_dbg_ex_instr_tag.tag
+	set_instance_assignment -name VIRTUAL_PIN ON -to o_dbg_if_instr_tag.tag
+	set_instance_assignment -name VIRTUAL_PIN ON -to o_dbg_di_instr_tag.is_branch
 
 	# start DESIGN_PARTITION(Top)
 	# ---------------------------

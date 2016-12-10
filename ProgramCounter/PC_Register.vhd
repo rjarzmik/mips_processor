@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-13
--- Last update: 2016-12-08
+-- Last update: 2016-12-10
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -25,6 +25,8 @@ use ieee.numeric_std.all;
 
 use work.cpu_defs.all;
 use work.instruction_defs.all;
+use work.instruction_record.instr_record;
+
 -------------------------------------------------------------------------------
 
 entity PC_Register is
@@ -79,9 +81,14 @@ architecture rtl of PC_Register is
   signal pc_next_stepped   : std_logic_vector(ADDR_WIDTH - 1 downto 0);
 
   --- Instruction tracker
-  signal instr_tag          : instr_tag_t;
-  signal itrack_req_pc      : std_logic;
-  signal itrack_req_pc_next : std_logic;
+  signal instr_tag             : instr_tag_t;
+  signal itrack_req_pc         : std_logic;
+  signal itrack_req_pc_next    : std_logic;
+  signal commited_instr_record : instr_record;
+  signal commited_instr_tag    : instr_tag_t;
+
+  --- Instruction misprediction tracker
+  signal mispredict_correct_pc : std_logic_vector(ADDR_WIDTH - 1 downto 0);
 
 --- Jump internal signals
 begin  -- architecture rtl
@@ -101,23 +108,41 @@ begin  -- architecture rtl
     generic map (
       ADDR_WIDTH => ADDR_WIDTH)
     port map (
-      clk                  => clk,
-      rst                  => rst,
-      i_record_pc1_req     => itrack_req_pc,
-      i_record_pc2_req     => itrack_req_pc_next,
-      i_pc1                => pc,
-      i_pc2                => pc_next,
-      i_pc1_instr_tag      => pc_instr_tag,
-      i_pc2_instr_tag      => pc_next_instr_tag,
-      i_commited_instr_tag => i_commited_instr_tag,
-      o_mispredict         => o_mispredicted,
-      i_btb_instr_tag      => INSTR_TAG_NONE
+      clk                     => clk,
+      rst                     => rst,
+      i_record_pc1_req        => itrack_req_pc,
+      i_record_pc2_req        => itrack_req_pc_next,
+      i_pc1                   => pc,
+      i_pc2                   => pc_next,
+      i_pc1_instr_tag         => pc_instr_tag,
+      i_pc2_instr_tag         => pc_next_instr_tag,
+      i_pc1_predict_next_pc   => pc_next,
+      i_pc2_predict_next_pc   => pc_next_stepped,
+      i_commited_instr_tag    => i_commited_instr_tag,
+      i_jump_target           => jump_target,
+      o_commited_instr_record => commited_instr_record,
+      o_commited_instr_tag    => commited_instr_tag,
+      i_btb_instr_tag         => INSTR_TAG_NONE
       );
+
+  mispredictor : entity work.Instruction_Misprediction
+    generic map (
+      ADDR_WIDTH => ADDR_WIDTH,
+      STEP       => STEP)
+    port map (
+      clk                     => clk,
+      rst                     => rst,
+      i_commited_instr_record => commited_instr_record,
+      i_commited_instr_tag    => commited_instr_tag,
+      i_commited_jump_target  => jump_target,
+      o_mispredict            => o_mispredicted,
+      o_mispredict_correct_pc => mispredict_correct_pc);
 
   process(clk, rst) is
     variable jump_recorded_valid          : boolean := false;
     variable jump_recorded_target         : std_logic_vector(ADDR_WIDTH - 1 downto 0);
     variable jump_recorded_target_stepped : std_logic_vector(ADDR_WIDTH - 1 downto 0);
+    variable jump_recorded_itag           : instr_tag_t;
   begin
     if rst = '1' then
       pc                 <= std_logic_vector(to_signed(0, ADDR_WIDTH));
@@ -131,6 +156,7 @@ begin  -- architecture rtl
       if jump_pc = '1' then
         jump_recorded_valid  := true;
         jump_recorded_target := jump_target;
+        jump_recorded_itag   := i_commited_instr_tag;
       end if;
 
       if stall_pc = '0' then
