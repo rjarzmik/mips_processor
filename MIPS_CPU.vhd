@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-11
--- Last update: 2016-12-10
+-- Last update: 2016-12-11
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -25,6 +25,7 @@ use ieee.numeric_std.all;
 
 use work.cpu_defs.all;
 use work.instruction_defs.instr_tag_t;
+use work.instruction_prediction.prediction_t;
 
 -------------------------------------------------------------------------------
 
@@ -69,7 +70,8 @@ entity MIPS_CPU is
     signal o_dbg_if_instr_tag       : out instr_tag_t;
     signal o_dbg_di_instr_tag       : out instr_tag_t;
     signal o_dbg_ex_instr_tag       : out instr_tag_t;
-    signal o_dbg_wb_instr_tag       : out instr_tag_t
+    signal o_dbg_wb_instr_tag       : out instr_tag_t;
+    signal o_dbg_if_prediction      : out prediction_t
     );
 
 end entity MIPS_CPU;
@@ -140,11 +142,12 @@ architecture rtl of MIPS_CPU is
   signal wb_killed                 : std_logic;
 
   -- Debug signals
-  signal dbg_if_pc       : std_logic_vector(ADDR_WIDTH - 1 downto 0);
-  signal dbg_di_pc       : std_logic_vector(ADDR_WIDTH - 1 downto 0);
-  signal dbg_ex_pc       : std_logic_vector(ADDR_WIDTH - 1 downto 0);
-  signal dbg_wb_pc       : std_logic_vector(ADDR_WIDTH - 1 downto 0);
-  signal dbg_commited_pc : std_logic_vector(ADDR_WIDTH - 1 downto 0);
+  signal dbg_if_pc         : std_logic_vector(ADDR_WIDTH - 1 downto 0);
+  signal dbg_di_pc         : std_logic_vector(ADDR_WIDTH - 1 downto 0);
+  signal dbg_ex_pc         : std_logic_vector(ADDR_WIDTH - 1 downto 0);
+  signal dbg_wb_pc         : std_logic_vector(ADDR_WIDTH - 1 downto 0);
+  signal dbg_commited_pc   : std_logic_vector(ADDR_WIDTH - 1 downto 0);
+  signal dbg_if_prediction : prediction_t;
 
 begin  -- architecture rtl
 
@@ -173,7 +176,8 @@ begin  -- architecture rtl
       i_commited_instr_tag        => commited_instr_tag,
       o_dbg_if_fetching_pc        => dbg_if_pc,
       o_dbg_if_pc                 => dbg_di_pc,
-      o_dbg_if_fetching_instr_tag => if_instr_tag);
+      o_dbg_if_fetching_instr_tag => if_instr_tag,
+      o_dbg_prediction            => dbg_if_prediction);
 
   di : entity work.Decode
     generic map (
@@ -316,6 +320,8 @@ begin  -- architecture rtl
   o_dbg_di_instr_tag <= di_instr_tag;
   o_dbg_ex_instr_tag <= ex_instr_tag;
   o_dbg_wb_instr_tag <= wb_instr_tag;
+
+  o_dbg_if_prediction <= dbg_if_prediction;
 
 end architecture rtl;
 

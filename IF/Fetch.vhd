@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-10
--- Last update: 2016-12-10
+-- Last update: 2016-12-11
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -25,6 +25,7 @@ use ieee.numeric_std.all;
 
 use work.cpu_defs.all;
 use work.instruction_defs.all;
+use work.instruction_prediction.prediction_t;
 
 -------------------------------------------------------------------------------
 
@@ -58,7 +59,8 @@ entity Fetch is
     -- Debug signals
     o_dbg_if_pc                 : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
     o_dbg_if_fetching_pc        : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
-    o_dbg_if_fetching_instr_tag : out instr_tag_t
+    o_dbg_if_fetching_instr_tag : out instr_tag_t;
+    o_dbg_prediction            : out prediction_t
     );
 
 end entity Fetch;
@@ -95,6 +97,9 @@ architecture rtl3 of Fetch is
   signal out_pc   : addr_t;
   signal out_data : data_t;
   signal out_itag : instr_tag_t;
+
+  --- Debug
+  signal dbg_pcprovider_prediction : prediction_t;
 
 begin
   iprovider : entity work.Instruction_Provider
@@ -137,7 +142,8 @@ begin
       o_current_pc_instr_tag => pcprovider_pc_instr_tag,
       o_next_pc              => pcprovider_next_pc,
       o_next_pc_instr_tag    => pcprovider_next_pc_instr_tag,
-      o_mispredicted         => pcprovider_mispredicted);
+      o_mispredicted         => pcprovider_mispredicted,
+      o_dbg_prediction       => dbg_pcprovider_prediction);
 
   --- PC stepper
   do_stall_pc <= '1' when iprovider_do_step_pc = '0' else '0';
@@ -183,5 +189,6 @@ begin
   o_dbg_if_pc                 <= out_pc;
   o_dbg_if_fetching_pc        <= dbg_iprovider_fetching;
   o_dbg_if_fetching_instr_tag <= dbg_iprovider_fetching_itag;
+  o_dbg_prediction            <= dbg_pcprovider_prediction;
 
 end architecture rtl3;

@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-12
--- Last update: 2016-12-10
+-- Last update: 2016-12-11
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -26,6 +26,7 @@ use ieee.numeric_std.all;
 use work.cpu_defs.all;
 use work.instruction_defs.instr_tag_t;
 use work.instruction_defs.INSTR_TAG_FIRST_VALID;
+use work.instruction_prediction.prediction_t;
 
 -------------------------------------------------------------------------------
 
@@ -82,11 +83,11 @@ architecture rtl of MIPS_CPU_tb is
   signal dbg_ex_itag       : instr_tag_t;
   signal dbg_wb_itag       : instr_tag_t;
   signal dbg_commited_itag : instr_tag_t;
-
+  signal dbg_if_prediction : prediction_t;
 
   function dbg_get_stage_letter(
-    rst    : std_logic; kill : std_logic; stall : std_logic;
-    itag  : instr_tag_t)
+    rst  : std_logic; kill : std_logic; stall : std_logic;
+    itag : instr_tag_t)
     return string is
     variable o : string(1 to 1);
   begin
@@ -149,6 +150,39 @@ architecture rtl of MIPS_CPU_tb is
     head(stage'length + 5 to stage'length + 6) := ")@";
     return head & to_hstring(pc);
   end function dbg_get_done_string;
+
+  function dbg_get_prediction_string(p               : prediction_t;
+                                     last_prediction : prediction_t)
+    return string is
+    variable move : string(1 to 4);
+  begin
+    if last_prediction.pc = p.pc and
+      last_prediction.next_pc = p.next_pc and
+      last_prediction.take_branch = p.take_branch
+    then
+      -- Nothing changed
+      return "";
+    else
+      if p.is_ja_jr then
+        move := "JUMP";
+      elsif p.is_branch then
+        case p.take_branch is
+          when 0 => move := "BR--";
+          when 1 => move := "BR- ";
+          when 2 => move := "BR+ ";
+          when 3 => move := "BR++";
+        end case;
+      else
+        move := "----";
+      end if;
+
+      if p.valid then
+        return to_hstring(p.pc) & "->" & to_hstring(p.next_pc) & "=" & move;
+      else
+        return "";
+      end if;
+    end if;
+  end function dbg_get_prediction_string;
 
   function dbg_get_regname(regnum : natural) return string is
     variable name : string(1 to 4);
@@ -261,7 +295,8 @@ begin  -- architecture rtl
       o_dbg_if_instr_tag       => dbg_if_itag,
       o_dbg_di_instr_tag       => dbg_di_itag,
       o_dbg_ex_instr_tag       => dbg_ex_itag,
-      o_dbg_wb_instr_tag       => dbg_wb_itag
+      o_dbg_wb_instr_tag       => dbg_wb_itag,
+      o_dbg_if_prediction      => dbg_if_prediction
       );
 
   Simulated_Memory_1 : entity work.Simulated_Memory
@@ -297,6 +332,7 @@ begin  -- architecture rtl
     variable unusable_op     : std_logic_vector(DATA_WIDTH - 1 downto 0) := (others => 'X');
     variable passed_by_addr0 : natural                                   := 0;
     variable fkill           : std_logic;
+    variable last_prediction : prediction_t;
   begin
     if dbg_ife_killed = '1' or dbg_jump_pc = '1' then
       fkill := '1';
@@ -314,7 +350,8 @@ begin  -- architecture rtl
         dbg_get_done_string("done", rst, dbg_commited_itag, dbg_commited_pc) & " " &
         dbg_get_regwrite_string(dbg_wb2di_reg1) &
         dbg_get_regwrite_string(dbg_wb2di_reg2) &
-        dbg_get_jump_string(dbg_jump_pc, dbg_jump_target);
+        dbg_get_jump_string(dbg_jump_pc, dbg_jump_target) & " " &
+        dbg_get_prediction_string(dbg_if_prediction, last_prediction);
       if dbg_commited_pc /= unusable_op then
         if to_integer(unsigned(dbg_commited_pc)) = 0 then
           passed_by_addr0 := passed_by_addr0 + 1;
@@ -325,6 +362,9 @@ begin  -- architecture rtl
         report "PC rolled over to 0, ending simulation." severity error;
         stop <= '1';
       end if;
+
+      last_prediction := dbg_if_prediction;
+
     end if;
   end process debug_proc;
 

@@ -26,15 +26,15 @@ use ieee.numeric_std.all;
 use work.cpu_defs.all;
 use work.instruction_defs.all;
 use work.instruction_record.all;
+use work.instruction_prediction.all;
 
 -------------------------------------------------------------------------------
 
 entity PC_Predictor is
 
   generic (
-    ADDR_WIDTH     : integer;
-    STEP           : integer;
-    NB_PREDICTIONS : positive
+    ADDR_WIDTH : integer;
+    STEP       : integer
     );
 
   port (
@@ -68,7 +68,9 @@ entity PC_Predictor is
     o_pc_instr_tag                 : out instr_tag_t;
     o_next_pc                      : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
     o_next_pc_instr_tag            : out instr_tag_t;
-    o_next_next_pc                 : out std_logic_vector(ADDR_WIDTH - 1 downto 0)
+    o_next_next_pc                 : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
+    -- Debug signals
+    o_dbg_prediction               : out prediction_t
     );
 
 end entity PC_Predictor;
@@ -78,44 +80,11 @@ end entity PC_Predictor;
 architecture rtl of PC_Predictor is
   subtype addr_t is std_logic_vector(ADDR_WIDTH - 1 downto 0);
 
-  type prediction_t is record
-    valid       : boolean;
-    pc          : addr_t;
-    next_pc     : addr_t;
-    is_ja_jr    : boolean;
-    is_branch   : boolean;
-    take_branch : natural range 0 to 3;  -- 0:never, 1:no, 2:yes, 3:always
-  end record;
-  type predictions_t is array(0 to NB_PREDICTIONS - 1) of prediction_t;
-
   -- Prediction cache
-  function is_prediction_hit(i_address   : addr_t;
-                             predictions : predictions_t)
-    return boolean is
-    variable found : boolean := false;
-  begin
-    for i in predictions'range loop
-      found := found or (predictions(i).valid and predictions(i).pc = i_address);
-    end loop;
-    return found;
-  end function is_prediction_hit;
 
-  function get_prediction(i_address   : addr_t;
-                          predictions : predictions_t)
-    return prediction_t is
-    variable found : prediction_t;
-  begin
-    for i in predictions'range loop
-      if predictions(i).valid and predictions(i).pc = i_address then
-        found := predictions(i);
-      end if;
-    end loop;
-    return found;
-  end function get_prediction;
-
-  procedure update_prediction(i_address  : in addr_t;
+  procedure update_prediction(i_address          : in    addr_t;
                               signal predictions : inout predictions_t;
-                              prediction : in prediction_t) is
+                              prediction         : in    prediction_t) is
   begin
     for i in predictions'range loop
       if predictions(i).valid and predictions(i).pc = i_address then
@@ -329,6 +298,7 @@ begin  -- architecture rtl
           alloc_prediction_idx                          := (alloc_prediction_idx + 1) mod NB_PREDICTIONS;
         end if;
         update_prediction(irecord.pc, predictions, prediction);
+        o_dbg_prediction <= prediction;
       elsif i_wrongly_predicted_is_stepped then
         -- Add a new prediction
         predictions(alloc_prediction_idx).valid     <= true;
@@ -345,6 +315,7 @@ begin  -- architecture rtl
             predictions(alloc_prediction_idx).take_branch <= 1;
           end if;
         end if;
+        o_dbg_prediction <= predictions(alloc_prediction_idx);
         alloc_prediction_idx := (alloc_prediction_idx + 1) mod NB_PREDICTIONS;
       end if;
     end if;

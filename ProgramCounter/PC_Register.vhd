@@ -26,6 +26,7 @@ use ieee.numeric_std.all;
 use work.cpu_defs.all;
 use work.instruction_defs.all;
 use work.instruction_record.instr_record;
+use work.instruction_prediction.prediction_t;
 
 -------------------------------------------------------------------------------
 
@@ -48,7 +49,9 @@ entity PC_Register is
     o_current_pc_instr_tag : out instr_tag_t;
     o_next_pc              : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
     o_next_pc_instr_tag    : out instr_tag_t;
-    o_mispredicted         : out std_logic
+    o_mispredicted         : out std_logic;
+    -- Debug
+    o_dbg_prediction       : out prediction_t
     );
 
 end entity PC_Register;
@@ -150,9 +153,8 @@ begin  -- architecture rtl
 
   predictor : entity work.PC_Predictor
     generic map (
-      ADDR_WIDTH     => ADDR_WIDTH,
-      STEP           => STEP,
-      NB_PREDICTIONS => 4)
+      ADDR_WIDTH => ADDR_WIDTH,
+      STEP       => STEP)
     port map (
       clk                            => clk,
       rst                            => rst,
@@ -179,7 +181,8 @@ begin  -- architecture rtl
       o_pc_instr_tag                 => pc_instr_tag,
       o_next_pc                      => pc_next,
       o_next_pc_instr_tag            => pc_next_instr_tag,
-      o_next_next_pc                 => pc_next_next);
+      o_next_next_pc                 => pc_next_next,
+      o_dbg_prediction               => o_dbg_prediction);
 
   --- Outputs
   o_current_pc           <= pc;
