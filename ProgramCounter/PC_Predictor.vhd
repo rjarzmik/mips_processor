@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-12-10
--- Last update: 2016-12-11
+-- Last update: 2016-12-12
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -93,6 +93,29 @@ architecture rtl of PC_Predictor is
     end loop;
   end procedure update_prediction;
 
+  function create_prediction(i_pc      : addr_t;
+                             i_next_pc : addr_t;
+                             itag      : instr_tag_t) return prediction_t is
+    variable o : prediction_t;
+  begin
+    o.valid     := true;
+    o.pc        := i_pc;
+    o.next_pc   := i_next_pc;
+    o.is_ja_jr  := itag.is_ja or itag.is_jr;
+    o.is_branch := itag.is_branch;
+    if itag.is_ja or itag.is_jr then
+      o.take_branch := 3;
+    elsif itag.is_branch then
+      if itag.is_branch_taken then
+        o.take_branch := 2;
+      else
+        o.take_branch := 1;
+      end if;
+    end if;
+    return o;
+  end function create_prediction;
+
+
   function guess_next_pc(pc          : addr_t;
                          predictions : predictions_t) return addr_t is
     variable o          : addr_t;
@@ -122,12 +145,6 @@ architecture rtl of PC_Predictor is
       o.is_jr           := prediction.is_ja_jr;
       o.is_branch_taken := prediction.take_branch >= 2;
     else
-      --if unsigned(pc) = x"0000002c" then
-      --  o.is_branch       := false;
-      --  o.is_ja           := true;
-      --  o.is_jr           := false;
-      --  o.is_branch_taken := true;
-      --else
       o.is_branch       := false;
       o.is_ja           := false;
       o.is_jr           := false;
@@ -266,13 +283,11 @@ begin  -- architecture rtl
         prediction := get_prediction(irecord.pc, predictions);
 
         if i_wrongly_predicted_is_branch or i_wrongly_predicted_is_jump then
-          -- remove a prediction entry
+          -- Remove a prediction entry
           prediction.valid := false;
         elsif itag.is_ja or itag.is_jr then
-          prediction.next_pc     := i_commited_jump_target;
-          prediction.is_ja_jr    := true;
-          prediction.take_branch := 0;
-          prediction.take_branch := 3;
+          -- Replace a prediction entry
+          prediction := create_prediction(irecord.pc, i_commited_jump_target, itag);
         elsif itag.is_branch and irecord.predict_next_pc = i_commited_jump_target then
           -- Update a branch prediction
           if itag.is_branch_taken then
@@ -288,35 +303,16 @@ begin  -- architecture rtl
           -- Shouldn't be a pc disrupt: remove a prediction entry
           prediction.valid := false;
         elsif i_wrongly_not_taken_branch or i_wrongly_not_taken_jump then
-          -- Add a new prediction
-          predictions(alloc_prediction_idx).valid       <= true;
-          predictions(alloc_prediction_idx).pc          <= irecord.pc;
-          predictions(alloc_prediction_idx).next_pc     <= i_commited_jump_target;
-          predictions(alloc_prediction_idx).is_ja_jr    <= i_wrongly_not_taken_jump;
-          predictions(alloc_prediction_idx).is_branch   <= i_wrongly_not_taken_branch;
-          predictions(alloc_prediction_idx).take_branch <= 2;
-          alloc_prediction_idx                          := (alloc_prediction_idx + 1) mod NB_PREDICTIONS;
+          -- Replace a prediction
+          prediction := create_prediction(irecord.pc, i_commited_jump_target, itag);
         end if;
         update_prediction(irecord.pc, predictions, prediction);
         o_dbg_prediction <= prediction;
       elsif i_wrongly_predicted_is_stepped then
         -- Add a new prediction
-        predictions(alloc_prediction_idx).valid     <= true;
-        predictions(alloc_prediction_idx).pc        <= irecord.pc;
-        predictions(alloc_prediction_idx).next_pc   <= i_commited_jump_target;
-        predictions(alloc_prediction_idx).is_ja_jr  <= itag.is_ja or itag.is_jr;
-        predictions(alloc_prediction_idx).is_branch <= itag.is_branch;
-        if itag.is_ja or itag.is_jr then
-          predictions(alloc_prediction_idx).take_branch <= 3;
-        elsif itag.is_branch then
-          if itag.is_branch_taken then
-            predictions(alloc_prediction_idx).take_branch <= 2;
-          else
-            predictions(alloc_prediction_idx).take_branch <= 1;
-          end if;
-        end if;
-        o_dbg_prediction <= predictions(alloc_prediction_idx);
-        alloc_prediction_idx := (alloc_prediction_idx + 1) mod NB_PREDICTIONS;
+        predictions(alloc_prediction_idx) <= create_prediction(irecord.pc, i_commited_jump_target, itag);
+        o_dbg_prediction                  <= create_prediction(irecord.pc, i_commited_jump_target, itag);
+        alloc_prediction_idx              := (alloc_prediction_idx + 1) mod NB_PREDICTIONS;
       end if;
     end if;
   end process predictor_updater;
