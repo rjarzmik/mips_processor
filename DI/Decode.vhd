@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-12
--- Last update: 2016-12-09
+-- Last update: 2016-12-12
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -50,6 +50,9 @@ entity Decode is
     --- Writeback input
     i_rwb_reg1     : in  register_port_type;
     i_rwb_reg2     : in  register_port_type;
+    --- Bypass input
+    i_bp_reg1      : in  register_port_type;
+    i_bp_reg2      : in  register_port_type;
     --- Outputs
     o_alu_op       : out alu_op_type;
     o_reg1         : out register_port_type;
@@ -152,6 +155,8 @@ architecture rtl of Decode is
   signal rti          : natural range 0 to NB_REGISTERS - 1;
   signal rdi          : natural range 0 to NB_REGISTERS - 1;
   signal func         : std_logic_vector(5 downto 0);
+  signal rfile_rs     : std_logic_vector(DATA_WIDTH - 1 downto 0);
+  signal rfile_rt     : std_logic_vector(DATA_WIDTH - 1 downto 0);
   signal rs           : std_logic_vector(DATA_WIDTH - 1 downto 0);
   signal rt           : std_logic_vector(DATA_WIDTH - 1 downto 0);
   signal immediate    : signed(DATA_WIDTH / 2 - 1 downto 0);
@@ -598,8 +603,8 @@ begin  -- architecture rtl
       rst           => rst,
       a_idx         => rsi,
       b_idx         => rti,
-      a             => rs,
-      b             => rt,
+      a             => rfile_rs,
+      b             => rfile_rt,
       rwb_reg1_we   => rwb_reg1_we,
       rwb_reg1_idx  => i_rwb_reg1.idx,
       rwb_reg1_data => i_rwb_reg1.data,
@@ -677,12 +682,12 @@ begin  -- architecture rtl
   op_code <= i_instruction(31 downto 26);
   func    <= i_instruction(5 downto 0);
 
-  rsi          <= 0 when rst = '1' else to_integer(unsigned(i_instruction(25 downto 21)));
-  rti          <= 0 when rst = '1' else to_integer(unsigned(i_instruction(20 downto 16)));
-  rdi          <= 0 when rst = '1' else to_integer(unsigned(i_instruction(15 downto 11)));
+  rsi          <= 0               when rst = '1' else to_integer(unsigned(i_instruction(25 downto 21)));
+  rti          <= 0               when rst = '1' else to_integer(unsigned(i_instruction(20 downto 16)));
+  rdi          <= 0               when rst = '1' else to_integer(unsigned(i_instruction(15 downto 11)));
   immediate    <= (others => '0') when rst = '1' else signed(i_instruction(15 downto 0));
   pc_displace  <= i_instruction(23 downto 0) & b"00";
-  is_immediate <= '1' when (op_code >= op_addi and op_code <= op_xori) or
+  is_immediate <= '1'             when (op_code >= op_addi and op_code <= op_xori) or
                   (op_code = op_lui) or
                   (op_code = op_lb) or
                   (op_code = op_lw) or
@@ -707,6 +712,8 @@ begin  -- architecture rtl
 
   rwb_reg1_we <= i_rwb_reg1.we;
   rwb_reg2_we <= i_rwb_reg2.we;
+  rs <= i_bp_reg1.data when i_bp_reg1.we else rfile_rs;
+  rt <= i_bp_reg2.data when i_bp_reg2.we else rfile_rt;
 
   o_src_reg1_idx <= rsi;
   o_src_reg2_idx <= rti;

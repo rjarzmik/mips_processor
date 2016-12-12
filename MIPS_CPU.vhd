@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-11
--- Last update: 2016-12-11
+-- Last update: 2016-12-12
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -124,6 +124,10 @@ architecture rtl of MIPS_CPU is
   signal wb_jump_target     : std_logic_vector(ADDR_WIDTH - 1 downto 0);
   signal commited_instr_tag : instr_tag_t;
 
+  -- Bypass signals
+  signal bp2di_reg1 : register_port_type;
+  signal bp2di_reg2 : register_port_type;
+
   -- Control signals
   --- Dependencies checkers
   signal RaW_detected              : std_logic;
@@ -197,6 +201,8 @@ begin  -- architecture rtl
       i_instr_tag    => di_instr_tag,
       i_rwb_reg1     => wb2di_reg1,
       i_rwb_reg2     => wb2di_reg2,
+      i_bp_reg1      => bp2di_reg1,
+      i_bp_reg2      => bp2di_reg2,
       o_alu_op       => alu_op,
       o_reg1         => di2ex_reg1,
       o_reg2         => di2ex_reg2,
@@ -279,15 +285,30 @@ begin  -- architecture rtl
       i_wb2di_reg2   => wb2di_reg2,
       o_raw_detected => RaW_detected);
 
+  bypass : entity work.Bypass
+    generic map (
+      NB_REGISTERS => NB_REGISTERS_GP + NB_REGISTERS_SPECIAL)
+    port map (
+      clk            => clk,
+      rst            => rst,
+      i_ex2wb_reg1   => ex2wb_reg1,
+      i_ex2wb_reg2   => ex2wb_reg2,
+      i_wb2di_reg1   => wb2di_reg1,
+      i_wb2di_reg2   => wb2di_reg2,
+      i_src_reg1_idx => di2ctrl_reg1_idx,
+      i_src_reg2_idx => di2ctrl_reg2_idx,
+      o_reg1         => bp2di_reg1,
+      o_reg2         => bp2di_reg2);
+
   -- Control signals
   pc_stalled  <= fetch_stalls_pc;
-  ife_stalled <= RaW_detected;
+  ife_stalled <= '1' when RaW_detected = '1' and bp2di_reg1.we = '0' and bp2di_reg2.we = '0' else '0';
   di_stalled  <= '0';
   ex_stalled  <= '0';
   wb_stalled  <= '0';
 
   ife_killed <= mispredict_kills_pipeline;
-  di_killed  <= mispredict_kills_pipeline or RaW_detected;
+  di_killed  <= '1' when mispredict_kills_pipeline = '1' or (RaW_detected = '1' and bp2di_reg1.we = '0' and bp2di_reg2.we = '0') else '0';
   ex_killed  <= mispredict_kills_pipeline;
   wb_killed  <= mispredict_kills_pipeline;
 
