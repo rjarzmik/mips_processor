@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-12
--- Last update: 2016-12-11
+-- Last update: 2016-12-17
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -54,10 +54,23 @@ architecture rtl of MIPS_CPU_tb is
   signal o_L2c_addr      : std_logic_vector(ADDR_WIDTH - 1 downto 0);
   signal i_L2c_read_data : std_logic_vector(DATA_WIDTH - 1 downto 0);
   signal i_L2c_valid     : std_logic;
+
+  -- Temprorary Data Memory interface
+  signal o_mem_addr       : std_logic_vector(ADDR_WIDTH - 1 downto 0);
+  signal i_mem_rd_valid   : std_logic;
+  signal i_mem_rd_data    : std_logic_vector(DATA_WIDTH - 1 downto 0);
+  signal o_mem_wr_en      : std_logic;
+  signal o_mem_word_width : std_logic;
+  signal o_mem_wr_data    : std_logic_vector(DATA_WIDTH - 1 downto 0);
+  signal i_mem_wr_ack     : std_logic;
+
   -- Debug signals
   signal dbg_if_pc       : std_logic_vector(ADDR_WIDTH - 1 downto 0);
   signal dbg_di_pc       : std_logic_vector(ADDR_WIDTH - 1 downto 0);
   signal dbg_ex_pc       : std_logic_vector(ADDR_WIDTH - 1 downto 0);
+  signal dbg_mem_pc      : std_logic_vector(ADDR_WIDTH - 1 downto 0);
+  signal dbg_mem1_pc     : std_logic_vector(ADDR_WIDTH - 1 downto 0);
+  signal dbg_mem2_pc     : std_logic_vector(ADDR_WIDTH - 1 downto 0);
   signal dbg_wb_pc       : std_logic_vector(ADDR_WIDTH - 1 downto 0);
   signal dbg_commited_pc : std_logic_vector(ADDR_WIDTH - 1 downto 0);
 
@@ -65,11 +78,13 @@ architecture rtl of MIPS_CPU_tb is
   signal dbg_ife_killed  : std_logic;
   signal dbg_di_killed   : std_logic;
   signal dbg_ex_killed   : std_logic;
+  signal dbg_mem_killed  : std_logic;
   signal dbg_wb_killed   : std_logic;
   signal dbg_pc_stalled  : std_logic;
   signal dbg_ife_stalled : std_logic;
   signal dbg_di_stalled  : std_logic;
   signal dbg_ex_stalled  : std_logic;
+  signal dbg_mem_stalled : std_logic;
   signal dbg_wb_stalled  : std_logic;
 
   signal dbg_jump_pc     : std_logic;
@@ -81,6 +96,8 @@ architecture rtl of MIPS_CPU_tb is
   signal dbg_if_itag       : instr_tag_t;
   signal dbg_di_itag       : instr_tag_t;
   signal dbg_ex_itag       : instr_tag_t;
+  signal dbg_mem_mid_itag  : instr_tag_t;
+  signal dbg_mem_itag      : instr_tag_t;
   signal dbg_wb_itag       : instr_tag_t;
   signal dbg_commited_itag : instr_tag_t;
   signal dbg_if_prediction : prediction_t;
@@ -272,20 +289,30 @@ begin  -- architecture rtl
       o_L2c_addr               => o_L2c_addr,
       i_L2c_read_data          => i_L2c_read_data,
       i_L2c_valid              => i_L2c_valid,
+      o_mem_addr               => o_mem_addr,
+      i_mem_rd_valid           => i_mem_rd_valid,
+      i_mem_rd_data            => i_mem_rd_data,
+      o_mem_wr_en              => o_mem_wr_en,
+      o_mem_word_width         => o_mem_word_width,
+      o_mem_wr_data            => o_mem_wr_data,
+      i_mem_wr_ack             => i_mem_wr_ack,
       o_dbg_if_pc              => dbg_if_pc,
       o_dbg_di_pc              => dbg_di_pc,
       o_dbg_ex_pc              => dbg_ex_pc,
+      o_dbg_mem_pc             => dbg_mem_pc,
       o_dbg_wb_pc              => dbg_wb_pc,
       o_dbg_commited_pc        => dbg_commited_pc,
       o_dbg_pc_killed          => dbg_pc_killed,
       o_dbg_ife_killed         => dbg_ife_killed,
       o_dbg_di_killed          => dbg_di_killed,
       o_dbg_ex_killed          => dbg_ex_killed,
+      o_dbg_mem_killed         => dbg_mem_killed,
       o_dbg_wb_killed          => dbg_wb_killed,
       o_dbg_pc_stalled         => dbg_pc_stalled,
       o_dbg_ife_stalled        => dbg_ife_stalled,
       o_dbg_di_stalled         => dbg_di_stalled,
       o_dbg_ex_stalled         => dbg_ex_stalled,
+      o_dbg_mem_stalled        => dbg_mem_stalled,
       o_dbg_wb_stalled         => dbg_wb_stalled,
       o_dbg_jump_pc            => dbg_jump_pc,
       o_dbg_jump_target        => dbg_jump_target,
@@ -295,6 +322,8 @@ begin  -- architecture rtl
       o_dbg_if_instr_tag       => dbg_if_itag,
       o_dbg_di_instr_tag       => dbg_di_itag,
       o_dbg_ex_instr_tag       => dbg_ex_itag,
+      o_dbg_mem_mid_instr_tag      => dbg_mem_mid_itag,
+      o_dbg_mem_instr_tag      => dbg_mem_itag,
       o_dbg_wb_instr_tag       => dbg_wb_itag,
       o_dbg_if_prediction      => dbg_if_prediction
       );
@@ -333,6 +362,11 @@ begin  -- architecture rtl
     variable passed_by_addr0 : natural                                   := 0;
     variable fkill           : std_logic;
     variable last_prediction : prediction_t;
+
+  --alias dbg_mem1_pc is
+  --  <<signal DUT.mem_stage.r1_dbg_mem_pc : std_logic_vector(ADDR_WIDTH -1 downto 0) >>;
+  --alias dbg_mem2_pc is
+  --  <<signal DUT.mem_stage.r2_dbg_mem_pc : std_logic_vector(ADDR_WIDTH -1 downto 0) >>;
   begin
     if dbg_ife_killed = '1' or dbg_jump_pc = '1' then
       fkill := '1';
@@ -346,6 +380,8 @@ begin  -- architecture rtl
         dbg_get_stage_string("if", rst, fkill, dbg_ife_stalled, dbg_if_pc, dbg_if_itag) & " " &
         dbg_get_stage_string("di", rst, dbg_di_killed, dbg_di_stalled, dbg_di_pc, dbg_di_itag) & " " &
         dbg_get_stage_string("ex", rst, dbg_ex_killed, dbg_ex_stalled, dbg_ex_pc, dbg_ex_itag) & " " &
+        dbg_get_stage_string("mem1", rst, dbg_mem_killed, dbg_mem_stalled, dbg_mem1_pc, dbg_mem_itag) & " " &
+        dbg_get_stage_string("mem2", rst, dbg_mem_killed, dbg_mem_stalled, dbg_mem2_pc, dbg_mem_mid_itag) & " " &
         dbg_get_stage_string("wb", rst, dbg_wb_killed, dbg_wb_stalled, dbg_wb_pc, dbg_wb_itag) & " " &
         dbg_get_done_string("done", rst, dbg_commited_itag, dbg_commited_pc) & " " &
         dbg_get_regwrite_string(dbg_wb2di_reg1) &
@@ -358,7 +394,7 @@ begin  -- architecture rtl
         end if;
       end if;
 
-      if passed_by_addr0 > 1 then
+      if passed_by_addr0 > 4 then
         report "PC rolled over to 0, ending simulation." severity error;
         stop <= '1';
       end if;
@@ -367,6 +403,39 @@ begin  -- architecture rtl
 
     end if;
   end process debug_proc;
+
+  -- purpose: memory
+  -- type   : sequential
+  -- inputs : clk, rst
+  -- outputs:
+  mem : process (clk, rst) is
+  begin  -- process mem
+    if rst = '1' then                   -- asynchronous reset (active low)
+      i_mem_rd_valid <= '0';
+      i_mem_rd_data  <= (others => '0');
+      i_mem_wr_ack   <= '0';
+    elsif rising_edge(clk) then         -- rising clock edge
+      i_mem_wr_ack <= '0';
+      if o_mem_wr_en = '1' then
+        i_mem_rd_valid <= '0';
+        i_mem_rd_data  <= i_mem_rd_data;
+        assert i_mem_wr_ack = '0' report "Invalid transaction" severity error;
+        i_mem_wr_ack   <= '1';
+      else
+        -- copy rd @ to data and change data order (ABCD -> DCBA)
+        i_mem_rd_data <= o_mem_addr(3 downto 0) &
+                         o_mem_addr(7 downto 4) &
+                         o_mem_addr(11 downto 8) &
+                         o_mem_addr(15 downto 12) &
+                         o_mem_addr(19 downto 16) &
+                         o_mem_addr(23 downto 20) &
+                         o_mem_addr(27 downto 24) &
+                         o_mem_addr(31 downto 28);
+
+        i_mem_rd_valid <= '1';
+      end if;
+    end if;
+  end process mem;
 
 end architecture rtl;
 

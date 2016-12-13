@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-11
--- Last update: 2016-12-12
+-- Last update: 2017-01-04
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -46,21 +46,34 @@ entity MIPS_CPU is
     o_L2c_addr                      : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
     i_L2c_read_data                 : in  std_logic_vector(DATA_WIDTH - 1 downto 0);
     i_L2c_valid                     : in  std_logic;
+    -- Temprorary Data Memory interface
+    o_mem_addr                      : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
+    i_mem_rd_valid                  : in  std_logic;
+    i_mem_rd_data                   : in  std_logic_vector(DATA_WIDTH - 1 downto 0);
+    o_mem_wr_en                     : out std_logic;
+    o_mem_word_width                : out std_logic;
+    o_mem_wr_data                   : out std_logic_vector(DATA_WIDTH - 1 downto 0);
+    i_mem_wr_ack                    : in  std_logic;
     -- Debug signals
     signal o_dbg_if_pc              : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
     signal o_dbg_di_pc              : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
     signal o_dbg_ex_pc              : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
+    signal o_dbg_mem_pc             : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
+    signal o_dbg_mem1_pc            : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
+    signal o_dbg_mem2_pc            : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
     signal o_dbg_wb_pc              : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
     signal o_dbg_commited_pc        : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
     signal o_dbg_pc_killed          : out std_logic;
     signal o_dbg_ife_killed         : out std_logic;
     signal o_dbg_di_killed          : out std_logic;
     signal o_dbg_ex_killed          : out std_logic;
+    signal o_dbg_mem_killed         : out std_logic;
     signal o_dbg_wb_killed          : out std_logic;
     signal o_dbg_pc_stalled         : out std_logic;
     signal o_dbg_ife_stalled        : out std_logic;
     signal o_dbg_di_stalled         : out std_logic;
     signal o_dbg_ex_stalled         : out std_logic;
+    signal o_dbg_mem_stalled        : out std_logic;
     signal o_dbg_wb_stalled         : out std_logic;
     signal o_dbg_jump_pc            : out std_logic;
     signal o_dbg_jump_target        : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
@@ -70,6 +83,8 @@ entity MIPS_CPU is
     signal o_dbg_if_instr_tag       : out instr_tag_t;
     signal o_dbg_di_instr_tag       : out instr_tag_t;
     signal o_dbg_ex_instr_tag       : out instr_tag_t;
+    signal o_dbg_mem_mid_instr_tag  : out instr_tag_t;
+    signal o_dbg_mem_instr_tag      : out instr_tag_t;
     signal o_dbg_wb_instr_tag       : out instr_tag_t;
     signal o_dbg_if_prediction      : out prediction_t
     );
@@ -112,13 +127,25 @@ architecture rtl of MIPS_CPU is
   signal di2ex_mem_op        : memory_op_type;
   signal ex_instr_tag        : instr_tag_t;
 
-  signal ex2wb_reg1        : register_port_type;
-  signal ex2wb_reg2        : register_port_type;
-  signal ex2wb_jump_target : std_logic_vector(ADDR_WIDTH - 1 downto 0);
-  signal ex2wb_is_jump     : std_logic;
-  signal ex2wb_mem_data    : std_logic_vector(DATA_WIDTH - 1 downto 0);
-  signal ex2wb_mem_op      : memory_op_type;
-  signal wb_instr_tag      : instr_tag_t;
+  signal ex2mem_reg1        : register_port_type;
+  signal ex2mem_reg2        : register_port_type;
+  signal ex2mem_jump_target : std_logic_vector(ADDR_WIDTH - 1 downto 0);
+  signal ex2mem_is_jump     : std_logic;
+  signal ex2mem_mem_data    : std_logic_vector(DATA_WIDTH - 1 downto 0);
+  signal ex2mem_mem_op      : memory_op_type;
+  signal mem_instr_tag      : instr_tag_t;
+  signal mem_mid_instr_tag  : instr_tag_t;
+
+  signal mem2ctrl_stage1_reg1 : register_port_type;
+  signal mem2ctrl_stage1_reg2 : register_port_type;
+  signal mem2ctrl_stage2_reg1 : register_port_type;
+  signal mem2ctrl_stage2_reg2 : register_port_type;
+
+  signal mem2wb_reg1        : register_port_type;
+  signal mem2wb_reg2        : register_port_type;
+  signal mem2wb_jump_target : std_logic_vector(ADDR_WIDTH - 1 downto 0);
+  signal mem2wb_is_jump     : std_logic;
+  signal wb_instr_tag       : instr_tag_t;
 
   signal wb_is_jump         : std_logic;
   signal wb_jump_target     : std_logic_vector(ADDR_WIDTH - 1 downto 0);
@@ -131,11 +158,15 @@ architecture rtl of MIPS_CPU is
   -- Control signals
   --- Dependencies checkers
   signal RaW_detected              : std_logic;
+  signal mem2upstream_stall_req    : std_logic;
+  --- Exception signals
+  signal mem_exception             : std_logic;
   --- Pipeline stage stallers
   signal pc_stalled                : std_logic;
   signal ife_stalled               : std_logic;
   signal di_stalled                : std_logic;
   signal ex_stalled                : std_logic;
+  signal mem_stalled               : std_logic;
   signal wb_stalled                : std_logic;
   --- Pipeline stage output killers (ie. "nop" replacement of stage output)
   signal mispredict_kills_pipeline : std_logic;
@@ -143,12 +174,16 @@ architecture rtl of MIPS_CPU is
   signal ife_killed                : std_logic;
   signal di_killed                 : std_logic;
   signal ex_killed                 : std_logic;
+  signal mem_killed                : std_logic;
   signal wb_killed                 : std_logic;
 
   -- Debug signals
   signal dbg_if_pc         : std_logic_vector(ADDR_WIDTH - 1 downto 0);
   signal dbg_di_pc         : std_logic_vector(ADDR_WIDTH - 1 downto 0);
   signal dbg_ex_pc         : std_logic_vector(ADDR_WIDTH - 1 downto 0);
+  signal dbg_mem_pc        : std_logic_vector(ADDR_WIDTH - 1 downto 0);
+  signal dbg_mem1_pc       : std_logic_vector(ADDR_WIDTH - 1 downto 0);
+  signal dbg_mem2_pc       : std_logic_vector(ADDR_WIDTH - 1 downto 0);
   signal dbg_wb_pc         : std_logic_vector(ADDR_WIDTH - 1 downto 0);
   signal dbg_commited_pc   : std_logic_vector(ADDR_WIDTH - 1 downto 0);
   signal dbg_if_prediction : prediction_t;
@@ -236,15 +271,63 @@ begin  -- architecture rtl
       i_mem_op      => di2ex_mem_op,
       i_instr_tag   => ex_instr_tag,
       i_divide_0    => di2ex_divide_0,
-      o_reg1        => ex2wb_reg1,
-      o_reg2        => ex2wb_reg2,
-      o_jump_target => ex2wb_jump_target,
-      o_is_jump     => ex2wb_is_jump,
-      o_mem_data    => ex2wb_mem_data,
-      o_mem_op      => ex2wb_mem_op,
-      o_instr_tag   => wb_instr_tag,
+      o_reg1        => ex2mem_reg1,
+      o_reg2        => ex2mem_reg2,
+      o_jump_target => ex2mem_jump_target,
+      o_is_jump     => ex2mem_is_jump,
+      o_mem_data    => ex2mem_mem_data,
+      o_mem_op      => ex2mem_mem_op,
+      o_instr_tag   => mem_instr_tag,
       i_dbg_ex_pc   => dbg_ex_pc,
-      o_dbg_ex_pc   => dbg_wb_pc);
+      o_dbg_ex_pc   => dbg_mem_pc);
+
+  mem_stage : entity work.Memory_access
+    generic map (
+      ADDR_WIDTH => ADDR_WIDTH,
+      DATA_WIDTH => DATA_WIDTH)
+    port map (
+      clk         => clk,               -- input clk
+      rst         => rst,               -- input async reset
+      stall_req   => mem_stalled,
+      kill_req    => mem_killed,
+      o_exception => mem_exception,
+
+      i_reg1        => ex2mem_reg1,
+      i_reg2        => ex2mem_reg2,
+      i_mem_op      => ex2mem_mem_op,
+      i_mem_data    => ex2mem_mem_data,
+      i_is_jump     => ex2mem_is_jump,
+      i_jump_target => ex2mem_jump_target,
+      i_instr_tag   => mem_instr_tag,
+
+      o_reg1        => mem2wb_reg1,
+      o_reg2        => mem2wb_reg2,
+      o_jump_target => mem2wb_jump_target,
+      o_is_jump     => mem2wb_is_jump,
+
+      o_stage1_reg1   => mem2ctrl_stage1_reg1,
+      o_stage1_reg2   => mem2ctrl_stage1_reg2,
+      o_stage2_reg1   => mem2ctrl_stage2_reg1,
+      o_stage2_reg2   => mem2ctrl_stage2_reg2,
+      o_mid_instr_tag => mem_mid_instr_tag,
+      o_instr_tag     => wb_instr_tag,
+
+      -- Memory interface
+      i_mem_rd_valid   => i_mem_rd_valid,
+      i_mem_rd_data    => i_mem_rd_data,
+      o_mem_wr_en      => o_mem_wr_en,
+      o_mem_word_width => o_mem_word_width,
+
+      i_mem_wr_ack  => i_mem_wr_ack,
+      o_mem_addr    => o_mem_addr,
+      o_mem_wr_data => o_mem_wr_data,
+      o_need_stall  => mem2upstream_stall_req,
+
+      -- debug signals
+      i_dbg_mem_pc  => dbg_mem_pc,
+      o_dbg_mem1_pc => dbg_mem1_pc,
+      o_dbg_mem2_pc => dbg_mem2_pc,
+      o_dbg_mem3_pc => dbg_wb_pc);
 
   wb : entity work.Writeback
     generic map (
@@ -256,10 +339,10 @@ begin  -- architecture rtl
       rst           => rst,
       stall_req     => wb_stalled,
       kill_req      => wb_killed,
-      i_reg1        => ex2wb_reg1,
-      i_reg2        => ex2wb_reg2,
-      i_jump_target => ex2wb_jump_target,
-      i_is_jump     => ex2wb_is_jump,
+      i_reg1        => mem2wb_reg1,
+      i_reg2        => mem2wb_reg2,
+      i_jump_target => mem2wb_jump_target,
+      i_is_jump     => mem2wb_is_jump,
       o_reg1        => wb2di_reg1,
       o_reg2        => wb2di_reg2,
       o_is_jump     => wb_is_jump,
@@ -273,14 +356,23 @@ begin  -- architecture rtl
     generic map (
       NB_REGISTERS => NB_REGISTERS_GP + NB_REGISTERS_SPECIAL)
     port map (
-      clk            => clk,
-      rst            => rst,
-      rsi            => di2ctrl_reg1_idx,
-      rti            => di2ctrl_reg2_idx,
-      i_di2ex_reg1   => di2ex_reg1,
-      i_di2ex_reg2   => di2ex_reg2,
-      i_ex2wb_reg1   => ex2wb_reg1,
-      i_ex2wb_reg2   => ex2wb_reg2,
+      clk           => clk,
+      rst           => rst,
+      rsi           => di2ctrl_reg1_idx,
+      rti           => di2ctrl_reg2_idx,
+      i_di2ex_reg1  => di2ex_reg1,
+      i_di2ex_reg2  => di2ex_reg2,
+      i_ex2mem_reg1 => ex2mem_reg1,
+      i_ex2mem_reg2 => ex2mem_reg2,
+
+      i_mem2ctrl_stage1_reg1 => mem2ctrl_stage1_reg1,
+      i_mem2ctrl_stage1_reg2 => mem2ctrl_stage1_reg2,
+      i_mem2ctrl_stage2_reg1 => mem2ctrl_stage2_reg1,
+      i_mem2ctrl_stage2_reg2 => mem2ctrl_stage2_reg2,
+
+      i_mem2wb_reg1 => mem2wb_reg1,
+      i_mem2wb_reg2 => mem2wb_reg2,
+
       i_wb2di_reg1   => wb2di_reg1,
       i_wb2di_reg2   => wb2di_reg2,
       o_raw_detected => RaW_detected);
@@ -291,8 +383,10 @@ begin  -- architecture rtl
     port map (
       clk            => clk,
       rst            => rst,
-      i_ex2wb_reg1   => ex2wb_reg1,
-      i_ex2wb_reg2   => ex2wb_reg2,
+      i_ex2mem_reg1  => ex2mem_reg1,
+      i_ex2mem_reg2  => ex2mem_reg2,
+      i_mem2wb_reg1  => mem2wb_reg1,
+      i_mem2wb_reg2  => mem2wb_reg2,
       i_wb2di_reg1   => wb2di_reg1,
       i_wb2di_reg2   => wb2di_reg2,
       i_src_reg1_idx => di2ctrl_reg1_idx,
@@ -301,28 +395,32 @@ begin  -- architecture rtl
       o_reg2         => bp2di_reg2);
 
   -- Control signals
-  pc_stalled  <= fetch_stalls_pc;
-  ife_stalled <= '1' when RaW_detected = '1' and bp2di_reg1.we = '0' and bp2di_reg2.we = '0' else '0';
-  di_stalled  <= '0';
-  ex_stalled  <= '0';
+  pc_stalled  <= fetch_stalls_pc or mem2upstream_stall_req;
+  ife_stalled <= '1' when (RaW_detected = '1' and bp2di_reg1.we = '0' and bp2di_reg2.we = '0') or mem2upstream_stall_req = '1' else '0';
+  di_stalled  <= mem2upstream_stall_req;
+  ex_stalled  <= mem2upstream_stall_req;
+  mem_stalled <= '0';
   wb_stalled  <= '0';
 
   ife_killed <= mispredict_kills_pipeline;
   di_killed  <= '1' when mispredict_kills_pipeline = '1' or (RaW_detected = '1' and bp2di_reg1.we = '0' and bp2di_reg2.we = '0') else '0';
+  mem_killed <= mispredict_kills_pipeline;
   ex_killed  <= mispredict_kills_pipeline;
   wb_killed  <= mispredict_kills_pipeline;
 
   -- Debug signal
-  o_dbg_if_pc <= dbg_if_pc;
-  o_dbg_di_pc <= dbg_di_pc;
-  o_dbg_ex_pc <= dbg_ex_pc;
-  o_dbg_wb_pc <= dbg_wb_pc;
+  o_dbg_if_pc  <= dbg_if_pc;
+  o_dbg_di_pc  <= dbg_di_pc;
+  o_dbg_ex_pc  <= dbg_ex_pc;
+  o_dbg_mem_pc <= dbg_mem_pc;
+  o_dbg_wb_pc  <= dbg_wb_pc;
 
   o_dbg_commited_pc <= dbg_commited_pc;
   o_dbg_pc_killed   <= pc_killed;
   o_dbg_ife_killed  <= ife_killed;
   o_dbg_di_killed   <= di_killed;
   o_dbg_ex_killed   <= ex_killed;
+  o_dbg_mem_killed  <= mem_killed;
   o_dbg_wb_killed   <= wb_killed;
   o_dbg_pc_stalled  <= pc_stalled;
   o_dbg_ife_stalled <= ife_stalled;
@@ -337,10 +435,12 @@ begin  -- architecture rtl
   o_dbg_wb2di_reg1 <= wb2di_reg1;
   o_dbg_wb2di_reg2 <= wb2di_reg2;
 
-  o_dbg_if_instr_tag <= if_instr_tag;
-  o_dbg_di_instr_tag <= di_instr_tag;
-  o_dbg_ex_instr_tag <= ex_instr_tag;
-  o_dbg_wb_instr_tag <= wb_instr_tag;
+  o_dbg_if_instr_tag      <= if_instr_tag;
+  o_dbg_di_instr_tag      <= di_instr_tag;
+  o_dbg_ex_instr_tag      <= ex_instr_tag;
+  o_dbg_mem_mid_instr_tag <= mem_mid_instr_tag;
+  o_dbg_mem_instr_tag     <= mem_instr_tag;
+  o_dbg_wb_instr_tag      <= wb_instr_tag;
 
   o_dbg_if_prediction <= dbg_if_prediction;
 

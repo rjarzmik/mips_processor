@@ -6,7 +6,7 @@
 -- Author     : Simon Desfarges
 -- Company    : 
 -- Created    : 2016-11-24
--- Last update: 2016-12-17
+-- Last update: 2017-01-04
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -76,7 +76,8 @@ entity Memory_access is
     o_reg2        : out register_port_type;
     o_jump_target : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
     o_is_jump     : out std_logic;
-    o_instr_tag   : out instr_tag_t;
+    o_instr_tag      : out instr_tag_t;
+    o_mid_instr_tag  : out instr_tag_t;
 
     -- Control hazard outputs. Needed to check RAW hazards
     o_stage1_reg1 : out register_port_type;
@@ -368,6 +369,7 @@ begin  -- architecture rtl
         o_is_jump     <= r2_is_jump;
 
         o_instr_tag <= r2_instr_tag;
+        o_mid_instr_tag <= r1_instr_tag;
       end if;
     end if;
   end process;
@@ -377,14 +379,16 @@ begin  -- architecture rtl
     if rst = '1' then                   -- asynchronous reset (active low)
       r1_dbg_mem_pc <= (others => '0');
       r2_dbg_mem_pc <= (others => '0');
-      o_dbg_mem1_pc <= (others => '0');
-      o_dbg_mem2_pc <= (others => '0');
+      o_dbg_mem1_pc <= (others => 'X');
+      o_dbg_mem2_pc <= (others => 'X');
+      o_dbg_mem3_pc <= (others => 'X');
     elsif rising_edge(clk) then         -- rising clock edge
       if kill_req = '1' then
         r1_dbg_mem_pc <= (others => 'X');
         r2_dbg_mem_pc <= (others => 'X');
-        o_dbg_mem1_pc <= (others => '0');
-        o_dbg_mem2_pc <= (others => '0');
+        o_dbg_mem1_pc <= (others => 'X');
+        o_dbg_mem2_pc <= (others => 'X');
+        o_dbg_mem3_pc <= (others => 'X');
       elsif stall_req = '0' then
         r1_dbg_mem_pc <= i_dbg_mem_pc;
         r2_dbg_mem_pc <= r1_dbg_mem_pc;
