@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-28
--- Last update: 2016-12-03
+-- Last update: 2016-12-14
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -40,9 +40,17 @@ entity Control_Decode_Dependencies is
     -- Decode to Execute
     signal i_di2ex_reg1   : in  register_port_type;
     signal i_di2ex_reg2   : in  register_port_type;
-    -- Execute to WriteBack
-    signal i_ex2wb_reg1   : in  register_port_type;
-    signal i_ex2wb_reg2   : in  register_port_type;
+    -- Execute to Memory
+    signal i_ex2mem_reg1   : in  register_port_type;
+    signal i_ex2mem_reg2   : in  register_port_type;
+    -- Memory internal pipe
+    signal i_mem2ctrl_stage1_reg1 : in register_port_type;
+    signal i_mem2ctrl_stage1_reg2 : in register_port_type;
+    signal i_mem2ctrl_stage2_reg1 : in register_port_type;
+    signal i_mem2ctrl_stage2_reg2 : in register_port_type;
+    -- Memory to WriteBack
+    signal i_mem2wb_reg1   : in  register_port_type;
+    signal i_mem2wb_reg2   : in  register_port_type;
     -- Writeback to Decode
     signal i_wb2di_reg1   : in  register_port_type;
     signal i_wb2di_reg2   : in  register_port_type;
@@ -69,12 +77,24 @@ begin  -- architecture rtl
   o_raw_detected <= '1' when
                     (i_di2ex_reg1.we = '1' and i_di2ex_reg1.idx = rsi) or
                     (i_di2ex_reg2.we = '1' and i_di2ex_reg2.idx = rsi) or
-                    (i_ex2wb_reg1.we = '1' and i_ex2wb_reg1.idx = rsi) or
-                    (i_ex2wb_reg2.we = '1' and i_ex2wb_reg2.idx = rsi) or
+                    (i_ex2mem_reg1.we = '1' and i_ex2mem_reg1.idx = rsi) or
+                    (i_ex2mem_reg2.we = '1' and i_ex2mem_reg2.idx = rsi) or
+                    (i_mem2ctrl_stage1_reg1.we = '1' and i_mem2ctrl_stage1_reg1.idx = rsi) or
+                    (i_mem2ctrl_stage1_reg2.we = '1' and i_mem2ctrl_stage1_reg2.idx = rsi) or
+                    (i_mem2ctrl_stage2_reg1.we = '1' and i_mem2ctrl_stage2_reg1.idx = rsi) or
+                    (i_mem2ctrl_stage2_reg2.we = '1' and i_mem2ctrl_stage2_reg2.idx = rsi) or
+                    (i_mem2wb_reg1.we = '1' and i_mem2wb_reg1.idx = rsi) or
+                    (i_mem2wb_reg2.we = '1' and i_mem2wb_reg2.idx = rsi) or
                     (i_wb2di_reg1.we = '1' and i_wb2di_reg1.idx = rsi) or
                     (i_wb2di_reg2.we = '1' and i_wb2di_reg2.idx = rsi) or
-                    (i_ex2wb_reg1.we = '1' and i_ex2wb_reg1.idx = rti) or
-                    (i_ex2wb_reg2.we = '1' and i_ex2wb_reg2.idx = rti) or
+                    (i_ex2mem_reg1.we = '1' and i_ex2mem_reg1.idx = rti) or
+                    (i_ex2mem_reg2.we = '1' and i_ex2mem_reg2.idx = rti) or
+                    (i_mem2ctrl_stage1_reg1.we = '1' and i_mem2ctrl_stage1_reg1.idx = rti) or
+                    (i_mem2ctrl_stage1_reg2.we = '1' and i_mem2ctrl_stage1_reg2.idx = rti) or
+                    (i_mem2ctrl_stage2_reg1.we = '1' and i_mem2ctrl_stage2_reg1.idx = rti) or
+                    (i_mem2ctrl_stage2_reg2.we = '1' and i_mem2ctrl_stage2_reg2.idx = rti) or
+                    (i_mem2wb_reg1.we = '1' and i_mem2wb_reg1.idx = rti) or
+                    (i_mem2wb_reg2.we = '1' and i_mem2wb_reg2.idx = rti) or
                     (i_wb2di_reg1.we = '1' and i_wb2di_reg1.idx = rti) or
                     (i_wb2di_reg2.we = '1' and i_wb2di_reg2.idx = rti)                    
                     else '0';
