@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-12
--- Last update: 2016-12-17
+-- Last update: 2017-01-01
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -24,6 +24,7 @@ use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
 use work.cpu_defs.all;
+use work.cache_defs.all;
 use work.instruction_defs.instr_tag_t;
 use work.instruction_defs.INSTR_TAG_FIRST_VALID;
 use work.instruction_prediction.prediction_t;
@@ -43,6 +44,7 @@ architecture rtl of MIPS_CPU_tb is
   constant DATA_WIDTH           : integer := 32;
   constant NB_REGISTERS_GP      : integer := 32;
   constant NB_REGISTERS_SPECIAL : integer := 2;
+  constant DEBUG : boolean := true;
 
   -- clock
   signal Clk  : std_logic := '1';
@@ -50,10 +52,14 @@ architecture rtl of MIPS_CPU_tb is
   signal stop : std_logic := '0';
 
   -- L2 connections
-  signal o_L2c_req       : std_logic;
-  signal o_L2c_addr      : std_logic_vector(ADDR_WIDTH - 1 downto 0);
-  signal i_L2c_read_data : std_logic_vector(DATA_WIDTH - 1 downto 0);
-  signal i_L2c_valid     : std_logic;
+  signal cls_creq  : cache_request_t;
+  signal cls_cresp : cache_response_t;
+  signal o_memory_req        : std_logic := '0';
+  signal o_memory_we         : std_logic := '0';
+  signal o_memory_addr       : addr_t;
+  signal o_memory_write_data : std_logic_vector(DATA_WIDTH - 1 downto 0);
+  signal i_memory_read_data  : std_logic_vector(DATA_WIDTH - 1 downto 0);
+  signal i_memory_valid      : std_logic;
 
   -- Temprorary Data Memory interface
   signal o_mem_addr       : std_logic_vector(ADDR_WIDTH - 1 downto 0);
@@ -285,10 +291,8 @@ begin  -- architecture rtl
     port map (
       clk                      => clk,
       rst                      => rst,
-      o_L2c_req                => o_L2c_req,
-      o_L2c_addr               => o_L2c_addr,
-      i_L2c_read_data          => i_L2c_read_data,
-      i_L2c_valid              => i_L2c_valid,
+      o_creq                   => cls_creq,
+      i_cresp                  => cls_cresp,
       o_mem_addr               => o_mem_addr,
       i_mem_rd_valid           => i_mem_rd_valid,
       i_mem_rd_data            => i_mem_rd_data,
@@ -328,20 +332,41 @@ begin  -- architecture rtl
       o_dbg_if_prediction      => dbg_if_prediction
       );
 
+  cls : entity work.cache_line_streamer
+    generic map (
+      ADDR_WIDTH           => ADDR_WIDTH,
+      DATA_WIDTH           => DATA_WIDTH,
+      DATAS_PER_LINE_WIDTH => DATAS_PER_LINE_WIDTH)
+    port map (
+      clk     => clk,
+      rst     => rst,
+      i_creq  => cls_creq,
+      o_cresp => cls_cresp,
+
+      o_memory_req   => o_memory_req,
+      o_memory_we    => o_memory_we,
+      o_memory_addr  => o_memory_addr,
+      o_memory_wdata => o_memory_write_data,
+      i_memory_rdata => i_memory_read_data,
+      i_memory_done  => i_memory_valid);
+
+  -- memory simulator
   Simulated_Memory_1 : entity work.Simulated_Memory
     generic map (
-      ADDR_WIDTH     => ADDR_WIDTH,
-      DATA_WIDTH     => DATA_WIDTH,
-      MEMORY_LATENCY => 1)
+      ADDR_WIDTH        => ADDR_WIDTH,
+      DATA_WIDTH        => DATA_WIDTH,
+      MEMORY_ADDR_WIDTH => 16,
+      MEMORY_LATENCY    => 3,
+      DEBUG             => DEBUG)
     port map (
       clk                 => clk,
       rst                 => rst,
-      i_memory_req        => o_L2c_req,
-      i_memory_we         => '0',
-      i_memory_addr       => o_L2c_addr,
-      i_memory_write_data => (others => 'X'),
-      o_memory_read_data  => i_L2c_read_data,
-      o_memory_valid      => i_L2c_valid);
+      i_memory_req        => o_memory_req,
+      i_memory_we         => o_memory_we,
+      i_memory_addr       => o_memory_addr,
+      i_memory_write_data => o_memory_write_data,
+      o_memory_read_data  => i_memory_read_data,
+      o_memory_valid      => i_memory_valid);
 
   -- reset
   Rst <= '0' or stop after 30 ps;

@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-10
--- Last update: 2016-12-11
+-- Last update: 2017-01-01
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -24,6 +24,7 @@ use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
 use work.cpu_defs.all;
+use work.cache_defs.all;
 use work.instruction_defs.all;
 use work.instruction_prediction.prediction_t;
 
@@ -48,10 +49,8 @@ entity Fetch is
     o_instr_tag                 : out instr_tag_t;
     o_mispredict_kill_pipeline  : out std_logic;
     -- L2 connections
-    o_L2c_req                   : out std_logic;
-    o_L2c_addr                  : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
-    i_L2c_read_data             : in  std_logic_vector(DATA_WIDTH - 1 downto 0);
-    i_L2c_valid                 : in  std_logic;
+    o_creq     : out cache_request_t;
+    i_cresp    : in  cache_response_t;
     -- Writeback feedback signals
     i_is_jump                   : in  std_logic;
     i_jump_target               : in  std_logic_vector(ADDR_WIDTH - 1 downto 0);
@@ -120,10 +119,8 @@ begin
       o_data                   => iprovider_data,
       o_valid                  => iprovider_data_valid,
       o_do_step_pc             => iprovider_do_step_pc,
-      o_L2c_req                => o_L2c_req,
-      o_L2c_addr               => o_L2c_addr,
-      i_L2c_read_data          => i_L2c_read_data,
-      i_L2c_valid              => i_L2c_valid,
+      o_creq                   => o_creq,
+      i_cresp                  => i_cresp,
       o_dbg_fetching           => dbg_iprovider_fetching,
       o_dbg_fetching_itag      => dbg_iprovider_fetching_itag);
 

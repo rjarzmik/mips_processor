@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-21
--- Last update: 2016-12-01
+-- Last update: 2016-12-29
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -36,14 +36,14 @@ architecture rtl of Simulated_Memory_tb is
   -- component generics
   constant ADDR_WIDTH     : integer                                  := 32;
   constant DATA_WIDTH     : integer                                  := 32;
-  constant MEMORY_LATENCY : natural                                  := 2;
+  constant MEMORY_LATENCY : natural                                  := 1;
   constant addr_zero      : std_logic_vector(ADDR_WIDTH -1 downto 0) := std_logic_vector(to_unsigned(0, ADDR_WIDTH));
 
   -- component ports
   signal clk                 : std_logic                                 := '1';
   signal rst                 : std_logic                                 := '1';
   signal i_memory_req        : std_logic                                 := '1';
-  signal i_memory_we         : std_logic;
+  signal i_memory_we         : std_logic := '0';
   signal i_memory_addr       : std_logic_vector(ADDR_WIDTH - 1 downto 0) := addr_zero;
   signal i_memory_write_data : std_logic_vector(DATA_WIDTH - 1 downto 0);
   signal o_memory_read_data  : std_logic_vector(DATA_WIDTH - 1 downto 0);

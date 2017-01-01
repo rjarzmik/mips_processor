@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-10
--- Last update: 2016-12-05
+-- Last update: 2017-01-01
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -23,6 +23,8 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
+use work.cache_defs.all;
+
 -------------------------------------------------------------------------------
 
 entity Instruction_Cache is
@@ -33,17 +35,15 @@ entity Instruction_Cache is
     );
 
   port (
-    clk             : in  std_logic;
-    rst             : in  std_logic;
+    clk        : in  std_logic;
+    rst        : in  std_logic;
     -- stall_req       : in  std_logic;
-    addr            : in  std_logic_vector(ADDR_WIDTH - 1 downto 0);
-    data            : out std_logic_vector(DATA_WIDTH - 1 downto 0);
-    data_valid      : out std_logic;
+    addr       : in  std_logic_vector(ADDR_WIDTH - 1 downto 0);
+    data       : out std_logic_vector(DATA_WIDTH - 1 downto 0);
+    data_valid : out std_logic;
     -- L2 connections
-    o_L2c_req       : out std_logic;
-    o_L2c_addr      : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
-    i_L2c_read_data : in  std_logic_vector(DATA_WIDTH - 1 downto 0);
-    i_L2c_valid     : in  std_logic
+    o_creq     : out cache_request_t;
+    i_cresp    : in  cache_response_t
     );
 
 end entity Instruction_Cache;
@@ -66,24 +66,20 @@ begin  -- architecture rtl
   -----------------------------------------------------------------------------
   L1_Instr : entity work.SinglePort_Associative_Cache
     generic map (
-      ADDR_WIDTH => ADDR_WIDTH,
-      DATA_WIDTH => DATA_WIDTH,
-      NB_DATA_PER_SET => 1,
-      NB_WAYS         => 4,
-      NB_SETS         => 4)
+      WRITE_BACK => false)
     port map (
-      clk                => clk,
-      rst                => rst,
-      i_porta_req        => i_porta_req,
-      i_porta_we         => '0',
-      i_porta_addr       => fetch_addr,
-      i_porta_write_data => (others => 'X'),
-      o_porta_read_data  => data,
-      o_porta_valid      => fetched_instr_valid,
-      o_memory_req       => o_L2c_req,
-      o_memory_addr      => o_L2c_addr,
-      i_memory_read_data => i_L2c_read_data,
-      i_memory_valid     => i_L2c_valid
+      clk                      => clk,
+      rst                      => rst,
+      i_porta_req              => i_porta_req,
+      i_porta_we               => '0',
+      i_porta_do_write_through => '0',
+      i_porta_addr             => fetch_addr,
+      i_porta_write_data       => (others => 'X'),
+      o_porta_read_data        => data,
+      o_porta_valid            => fetched_instr_valid,
+      -- Carry over
+      o_creq                   => o_creq,
+      i_cresp                  => i_cresp
       );
 
   i_porta_req <= '1' when rst = '0';

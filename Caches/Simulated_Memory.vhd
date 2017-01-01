@@ -7,7 +7,7 @@
 --            : Simon Desfarges <simon.desfarges@free.fr>
 -- Company    : 
 -- Created    : 2016-11-20
--- Last update: 2016-12-09
+-- Last update: 2017-01-01
 -- Platform   : 
 -- Standard   : VHDL'08
 -------------------------------------------------------------------------------
@@ -42,9 +42,10 @@ entity Simulated_Memory is
   generic (
     ADDR_WIDTH        : integer := 32;
     DATA_WIDTH        : integer := 32;
-    MEMORY_LATENCY    : natural := 1;
-    MEMORY_ADDR_WIDTH : natural := 5;
-    MEMORY_FILE       : string  := "memory_data.txt"
+    MEMORY_LATENCY    : positive := 1;
+    MEMORY_ADDR_WIDTH : natural := 7;
+    MEMORY_FILE       : string  := "memory_data.txt";
+    DEBUG             : boolean := false
     );
 
   port (
@@ -68,34 +69,41 @@ architecture rtl of Simulated_Memory is
   -----------------------------------------------------------------------------
   -- Internal signal declarations
   -----------------------------------------------------------------------------
-  type memory is array(0 to 2**MEMORY_ADDR_WIDTH - 1) of
-    std_logic_vector(DATA_WIDTH - 1 downto 0);
---constant rom : memory := (
---    x"24040011",  --   0:       24040011        li      a0,17
---    x"2c820002",  --   4:       2c820002        sltiu   v0,a0,2
---    x"1440000b",  --   8:       1440000b        bnez    v0,38 <fibo_flat+0x38>
---    x"24030001",  --   c:       24030001        li      v1,1
---    x"00003021",  --  10:       00003021        move    a2,zero
---    x"08000008",  --  14:       08000008        j       20 <fibo_flat+0x20>
---    x"24050001",  --  18:       24050001        li      a1,1
---    x"00402821",  --  1c:       00402821        move    a1,v0
---    x"24630001",  --  20:       24630001        addiu   v1,v1,1
---    x"00c51021",  --  24:       00c51021        addu    v0,a2,a1
---    x"1483fffc",  --  28:       1483fffc        bne     a0,v1,1c <fibo_flat+0x1c>
---    x"00a03021",  --  2c:       00a03021        move    a2,a1
---    x"03e00008",  --  30:       03e00008        jr      ra
---    x"00200825",  --  34:       00200825        move    at,at
---    x"03e00008",  --  38:       03e00008        jr      ra
---    x"00801021",  --  3c:       00801021        move    v0,a0
---    others => (others => '0')
---    );
+  subtype addr_t is std_logic_vector(ADDR_WIDTH - 1 downto 0);
+  subtype data_t is std_logic_vector(DATA_WIDTH - 1 downto 0);
 
-  signal request_addr_valid : boolean := false;
-  signal request_addr       : std_logic_vector(ADDR_WIDTH - 1 downto 0);
-  signal requested          : boolean := false;
-
-  signal memory_read_data : std_logic_vector(DATA_WIDTH - 1 downto 0);
-  signal memory_valid     : std_logic;
+  type memory is array(0 to 2**(MEMORY_ADDR_WIDTH - DATA_WIDTH / 8) - 1) of
+    data_t;
+  --constant rom : memory := (
+    --x"24040011",  --   0:       24040011        li      a0,17
+    --x"2c820002",  --   4:       2c820002        sltiu   v0,a0,2
+    --x"1440000b",  --   8:       1440000b        bnez    v0,38 <fibo_flat+0x38>
+    --x"24030001",  --   c:       24030001        li      v1,1
+    --x"00003021",  --  10:       00003021        move    a2,zero
+    --x"08000008",  --  14:       08000008        j       20 <fibo_flat+0x20>
+    --x"24050001",  --  18:       24050001        li      a1,1
+    --x"00402821",  --  1c:       00402821        move    a1,v0
+    --x"24630001",  --  20:       24630001        addiu   v1,v1,1
+    --x"00c51021",  --  24:       00c51021        addu    v0,a2,a1
+    --x"1483fffc",  --  28:       1483fffc        bne     a0,v1,1c <fibo_flat+0x1c>
+    --x"00a03021",  --  2c:       00a03021        move    a2,a1
+    --x"03e00008",  --  30:       03e00008        jr      ra
+    --x"00200825",  --  34:       00200825        move    at,at
+    --x"03e00008",  --  38:       03e00008        jr      ra
+    --x"00801021",  --  3c:       00801021        move    v0,a0
+    --others => (others => '0')
+  --);
+  --function init_ram_data_offsets_addr(ofs : natural) return memory is
+  --  variable o : memory;
+  --  variable d : natural;
+  --begin
+  --  for i in o'range loop
+  --    d := (i * DATA_WIDTH / 8 + ofs); -- mod 2**memory(0)'length;
+  --    o(i) := std_logic_vector(to_unsigned(d, DATA_WIDTH));
+  --  end loop;
+  --  return o;
+  --end function init_ram_data_offsets_addr;
+  --signal ram : memory := init_ram_data_offsets_addr(16#0100#);
 
   impure function init_ram(FileName : string)
     return memory is
@@ -107,7 +115,7 @@ architecture rtl of Simulated_Memory is
     variable good        : boolean;
 
   begin
-    for addr_pos in 0 to 2**MEMORY_ADDR_WIDTH - 1 loop
+    for addr_pos in 0 to 2**(MEMORY_ADDR_WIDTH - DATA_WIDTH / 8) - 1 loop
       exit when endfile(FileHandle);
 
       good := false;
@@ -120,55 +128,146 @@ architecture rtl of Simulated_Memory is
     end loop;
     return tmp;
   end init_ram;
-  signal rom : memory := init_ram(MEMORY_FILE);
+  signal ram : memory := init_ram(MEMORY_FILE);
+
+  type state_t is (idle, read_done, write_done, latency_wait);
+
+  function get_done_state(req : std_logic; we : std_logic) return state_t is
+  begin
+    if req = '1' then
+      if we = '0' then
+        return read_done;
+      else
+        return write_done;
+      end if;
+    else
+      return idle;
+    end if;
+  end function get_done_state;
+
+  function read_ram(addr : addr_t;
+                    signal mem : in memory) return data_t is
+  begin
+    return mem((to_integer(unsigned(addr)) / (DATA_WIDTH / 8)));
+  end function read_ram;
+
+  procedure write_ram(addr : addr_t; wdata : data_t;
+                      signal mem : out memory) is
+  begin
+    mem((to_integer(unsigned(addr)) / (DATA_WIDTH / 8))) <= wdata;
+  end procedure write_ram;
+
+  procedure do_memory_op(addr : addr_t; we : std_logic;
+                         rdata : out data_t;
+                         wdata : in data_t;
+                         signal mem : inout memory) is
+  begin
+    if we = '0' then
+      rdata := read_ram(addr, mem);
+
+      -- pragma translate_off
+      if DEBUG then
+        report "Simulated_Memory: read[0x" & to_hstring(addr) &
+          "] => 0x" & to_hstring(rdata);
+      end if;
+      -- pragma translate_on
+    else
+      write_ram(addr, wdata, mem);
+
+      -- pragma translate_off
+      if DEBUG then
+          report "Simulated_Memory: write [0x" & to_hstring(addr) &
+            "] <= 0x" & to_hstring(wdata);
+      end if;
+      -- pragma translate_on
+    end if;
+  end procedure do_memory_op;
 
 begin  -- architecture rtl
 
-  -----------------------------------------------------------------------------
-  -- Component instantiations
-  -----------------------------------------------------------------------------
-  process(rst, clk)
-    variable wait_clk : natural := 0;
+  handler : process(rst, clk, i_memory_req, i_memory_we, i_memory_addr)
+    variable mreq   : std_logic;
+    variable mwe    : std_logic;
+    variable maddr  : addr_t;
+    variable rdata  : data_t;
+    variable wdata  : data_t;
+    variable valid  : std_logic;
+    variable state  : state_t := idle;
+    variable waits  : natural;
   begin
+
     if rst = '1' then
-      memory_read_data   <= (others => 'X');
-      memory_valid       <= '0';
-      request_addr       <= (others => '0');
-      request_addr_valid <= false;
-    elsif rising_edge(clk) and MEMORY_LATENCY > 0 then
-      if i_memory_req = '1' and (not request_addr_valid or i_memory_addr /= request_addr) then
-        wait_clk           := MEMORY_LATENCY - 1;
-        request_addr       <= i_memory_addr;
-        request_addr_valid <= true;
-        requested          <= true;
-        if MEMORY_LATENCY > 1 then
-          memory_valid <= '0';
-        else
-          memory_valid <= '1';
-        end if;
-        memory_read_data <= (others => 'X');
-      elsif i_memory_req = '1' and (not request_addr_valid or i_memory_addr = request_addr) then
-      end if;
+      valid := '0';
+      rdata := (others => 'X');
+    else
+      case state is
+        when idle =>
+          if MEMORY_LATENCY = 0 and i_memory_req = '1' then
+            valid := '1';
+            do_memory_op(i_memory_addr, i_memory_we, rdata, wdata, ram);
+          elsif MEMORY_LATENCY = 1 and i_memory_req = '1' then
+            if rising_edge(clk) then
+              do_memory_op(i_memory_addr, i_memory_we, rdata, wdata, ram);
+              valid := '1';
+              state := get_done_state(i_memory_req, i_memory_we);
+            end if;
+          elsif MEMORY_LATENCY > 1 and i_memory_req = '1' then
+            if rising_edge(clk) then
+              state := latency_wait;
+              maddr := i_memory_addr;
+              mwe   := i_memory_we;
+              wdata := i_memory_write_data;
+              waits := MEMORY_LATENCY - 1;
+              valid := '0';
+              rdata := (others => 'X');
+            end if;
+          end if;
 
-      if requested and wait_clk > 0 then
-        wait_clk := wait_clk - 1;
-      end if;
+        when read_done | write_done =>
+          if MEMORY_LATENCY = 1 and i_memory_req = '1' then
+            if rising_edge(clk) then
+              do_memory_op(i_memory_addr, i_memory_we, rdata, wdata, ram);
+              valid := '1';
+              state := get_done_state(i_memory_req, i_memory_we);
+            end if;
+          elsif MEMORY_LATENCY = 1 and i_memory_req = '0' then
+            if rising_edge(clk) then
+              state := idle;
+            end if;
+          elsif MEMORY_LATENCY > 1 and i_memory_req = '1' then
+            if rising_edge(clk) then
+              state := latency_wait;
+              maddr := i_memory_addr;
+              mwe   := i_memory_we;
+              wdata := i_memory_write_data;
+              waits := MEMORY_LATENCY - 1;
+              valid := '0';
+              rdata := (others => 'X');
+            end if;
+          elsif MEMORY_LATENCY > 1 and i_memory_req = '0' then
+            if rising_edge(clk) then
+              state := idle;
+            end if;
+          end if;
 
-      if requested and wait_clk = 0 then
-        requested <= false;
-        memory_read_data <=
-          rom(to_integer(unsigned(request_addr)) / (DATA_WIDTH / 8));
-        memory_valid <= '1';
-      end if;
+        when latency_wait =>
+          valid := '0';
+          rdata := (others => 'X');
+          if rising_edge(clk) then
+            waits := waits - 1;
+            if waits = 0 then
+              state := get_done_state('1', mwe);
+              valid := '1';
+              do_memory_op(maddr, mwe, rdata, wdata, ram);
+            end if;
+          end if;
+      end case;
     end if;
-  end process;
 
-  o_memory_valid <= '0' when rst = '1' else
-                    memory_valid when (MEMORY_LATENCY > 0) else '1';
-  o_memory_read_data <= (others => 'X') when rst = '1' else
-                        memory_read_data                                           when (MEMORY_LATENCY > 1) else
-                        rom(to_integer(unsigned(request_addr)) / (DATA_WIDTH / 8)) when request_addr_valid and (MEMORY_LATENCY = 1) else
-                        rom(to_integer(unsigned(i_memory_addr)) / (DATA_WIDTH / 8));
+    o_memory_read_data <= rdata;
+    o_memory_valid <= valid;
+  end process handler;
+
 end architecture rtl;
 
 -------------------------------------------------------------------------------

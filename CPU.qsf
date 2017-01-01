@@ -19,7 +19,7 @@
 #
 # Quartus Prime
 # Version 16.1.0 Build 196 10/24/2016 SJ Lite Edition
-# Date created = 23:07:36  December 17, 2016
+# Date created = 17:08:25  January 01, 2017
 #
 # -------------------------------------------------------------------------- #
 #
@@ -45,6 +45,18 @@ set_global_assignment -name PROJECT_CREATION_TIME_DATE "22:14:03  NOVEMBER 10, 2
 set_global_assignment -name LAST_QUARTUS_VERSION "16.1.0 Lite Edition"
 set_global_assignment -name PROJECT_OUTPUT_DIRECTORY output_files
 set_global_assignment -name SMART_RECOMPILE ON
+set_global_assignment -name VHDL_FILE Caches/tags_data_mem.vhd
+set_global_assignment -name VHDL_FILE Caches/tag_entry_mux.vhd
+set_global_assignment -name VHDL_FILE Caches/memory_tagmem_internal.vhd
+set_global_assignment -name VHDL_FILE Caches/memory_cacheline_internal.vhd
+set_global_assignment -name VHDL_FILE Caches/memory_eviction_internal.vhd
+set_global_assignment -name VHDL_FILE Caches/memory_internal.vhd
+set_global_assignment -name VHDL_FILE Caches/mask_feeder.vhd
+set_global_assignment -name VHDL_FILE Caches/data_t_mux.vhd
+set_global_assignment -name VHDL_FILE Caches/cache_line_streamer.vhd
+set_global_assignment -name VHDL_FILE Caches/cache_line_mux.vhd
+set_global_assignment -name VHDL_FILE Caches/cache_defs.vhd
+set_global_assignment -name VHDL_FILE Caches/cache_data_mem.vhd
 set_global_assignment -name VHDL_FILE Control/Bypass.vhd
 set_global_assignment -name VHDL_FILE instruction_prediction.vhd
 set_global_assignment -name VHDL_FILE ProgramCounter/PC_Predictor.vhd
@@ -91,7 +103,6 @@ set_global_assignment -name PROJECT_IP_REGENERATION_POLICY ALWAYS_REGENERATE_IP
 set_global_assignment -name EDA_DESIGN_ENTRY_SYNTHESIS_TOOL "<None>"
 set_global_assignment -name VHDL_INPUT_VERSION VHDL_2008
 set_global_assignment -name VHDL_SHOW_LMF_MAPPING_MESSAGES OFF
-set_global_assignment -name TOP_LEVEL_ENTITY MIPS_CPU
 set_global_assignment -name TOP_LEVEL_ENTITY MIPS_CPU
 
 # Fitter Assignments
