@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-12
--- Last update: 2016-12-12
+-- Last update: 2017-01-04
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -63,7 +63,7 @@ entity Decode is
     o_mem_op       : out memory_op_type;
     o_divide_0     : out std_logic;  -- if set, a division attempt will be a X/0
     o_instr_tag    : out instr_tag_t;
-    --- Control outputs
+    --- Control and bypass outputs
     o_src_reg1_idx : out natural range 0 to NB_REGISTERS - 1;
     o_src_reg2_idx : out natural range 0 to NB_REGISTERS - 1;
     -- Debug signal
@@ -122,6 +122,9 @@ end entity Decode;
 -------------------------------------------------------------------------------
 
 architecture rtl of Decode is
+  subtype addr_t is std_logic_vector(ADDR_WIDTH - 1 downto 0);
+  subtype data_t is std_logic_vector(DATA_WIDTH - 1 downto 0);
+
   alias ra : std_logic_vector(DATA_WIDTH - 1 downto 0) is o_reg1.data;
   alias rb : std_logic_vector(DATA_WIDTH - 1 downto 0) is o_reg2.data;
 
@@ -135,6 +138,7 @@ architecture rtl of Decode is
     port (
       clk           : in  std_logic;
       rst           : in  std_logic;
+      stall_req     : in  std_logic;
       a_idx         : in  natural range 0 to NB_REGISTERS + NB_REGISTERS_SPECIAL - 1;
       b_idx         : in  natural range 0 to NB_REGISTERS + NB_REGISTERS_SPECIAL - 1;
       rwb_reg1_we   : in  std_logic;
@@ -151,441 +155,36 @@ architecture rtl of Decode is
   -- Internal signal declarations
   -----------------------------------------------------------------------------
   signal op_code      : std_logic_vector(5 downto 0);
+  signal func         : std_logic_vector(5 downto 0);
   signal rsi          : natural range 0 to NB_REGISTERS - 1;
   signal rti          : natural range 0 to NB_REGISTERS - 1;
   signal rdi          : natural range 0 to NB_REGISTERS - 1;
-  signal func         : std_logic_vector(5 downto 0);
   signal rfile_rs     : std_logic_vector(DATA_WIDTH - 1 downto 0);
   signal rfile_rt     : std_logic_vector(DATA_WIDTH - 1 downto 0);
-  signal rs           : std_logic_vector(DATA_WIDTH - 1 downto 0);
-  signal rt           : std_logic_vector(DATA_WIDTH - 1 downto 0);
   signal immediate    : signed(DATA_WIDTH / 2 - 1 downto 0);
   signal next_pc      : std_logic_vector(ADDR_WIDTH - 1 downto 0);
   signal pc_displace  : std_logic_vector(25 downto 0);
-  signal rtype        : std_logic;
   signal decode_error : std_logic;
-  signal is_immediate : std_logic;
-  signal is_branch    : std_logic;
-  signal is_jump      : std_logic;
-  signal is_jr        : std_logic;
-  signal is_rtype     : std_logic;
-  signal is_memory    : std_logic;
-  -- Converters of register indexes from natural unbound to 0..NB_REGISTERS-1 range
-  signal o_reg1_idx   : natural range 0 to NB_REGISTERS - 1;
-  signal o_reg2_idx   : natural range 0 to NB_REGISTERS - 1;
   -- Enable writeback of register file if not stalled
   signal rwb_reg1_we  : std_logic;
   signal rwb_reg2_we  : std_logic;
 
-  -----------------------------------------------------------------------------
-  -- Internal decoder procedures
-  -----------------------------------------------------------------------------
-  procedure do_reset(
-    signal decode_error : out std_logic;
-    signal alu_op       : out alu_op_type;
-    signal ra           : out std_logic_vector(DATA_WIDTH - 1 downto 0);
-    signal rb           : out std_logic_vector(DATA_WIDTH - 1 downto 0);
-    signal reg1_we      : out std_logic;
-    signal reg1_idx     : out natural range 0 to NB_REGISTERS - 1;
-    signal reg2_we      : out std_logic;
-    signal reg2_idx     : out natural range 0 to NB_REGISTERS - 1;
-    signal jump_target  : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
-    signal jump_op      : out jump_type;
-    signal mem_op       : out memory_op_type;
-    signal o_divide_0   : out std_logic;
-    signal instr_tag    : out instr_tag_t) is
-  begin
-    decode_error <= '0';
-    alu_op       <= all_zero;
-    ra           <= (others => '0');
-    rb           <= (others => '0');
-    reg1_we      <= '0';
-    reg1_idx     <= 0;
-    reg2_we      <= '0';
-    reg2_idx     <= 0;
-    jump_op      <= none;
-    mem_op       <= none;
-    o_divide_0   <= '1';
-    instr_tag    <= INSTR_TAG_NONE;
-  end procedure do_reset;
+  type reg_src is (bypassed_regfile, zero, immediate_unsigned, immediate_signextend);
+  signal ra_src                : reg_src;
+  signal rb_src                : reg_src;
+  signal bp_rs                 : register_port_type;
+  signal bp_rt                 : register_port_type;
+  constant r0                  : data_t := (others => '0');
+  signal rimmediate            : std_logic_vector(DATA_WIDTH / 2 - 1 downto 0);
+  signal rimmediate_unsigned   : data_t;
+  signal rimmediate_signextend : data_t;
 
-  procedure do_kill_pipeline_stage(
-    signal decode_error : out std_logic;
-    signal alu_op       : out alu_op_type;
-    signal ra           : out std_logic_vector(DATA_WIDTH - 1 downto 0);
-    signal rb           : out std_logic_vector(DATA_WIDTH - 1 downto 0);
-    signal reg1_we      : out std_logic;
-    signal reg1_idx     : out natural range 0 to NB_REGISTERS - 1;
-    signal reg2_we      : out std_logic;
-    signal reg2_idx     : out natural range 0 to NB_REGISTERS - 1;
-    signal jump_target  : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
-    signal jump_op      : out jump_type;
-    signal mem_op       : out memory_op_type;
-    signal o_divide_0   : out std_logic;
-    signal instr_tag    : out instr_tag_t) is
-  begin
-    decode_error <= '0';
-    alu_op       <= all_zero;
-    ra           <= (others => '0');
-    rb           <= (others => '0');
-    reg1_we      <= '0';
-    reg1_idx     <= 0;
-    reg2_we      <= '0';
-    reg2_idx     <= 0;
-    jump_op      <= none;
-    jump_target  <= (others => '0');
-    mem_op       <= none;
-    o_divide_0   <= '1';
-    instr_tag    <= INSTR_TAG_NONE;
-  end procedure do_kill_pipeline_stage;
-
-  procedure do_branch(
-    signal op_code      : in  std_logic_vector(5 downto 0);
-    signal next_pc      : in  std_logic_vector(ADDR_WIDTH - 1 downto 0);
-    signal immediate    : in  signed(DATA_WIDTH / 2 - 1 downto 0);
-    signal rs           : in  std_logic_vector(DATA_WIDTH - 1 downto 0);
-    signal rt           : in  std_logic_vector(DATA_WIDTH - 1 downto 0);
-    signal decode_error : out std_logic;
-    signal alu_op       : out alu_op_type;
-    signal ra           : out std_logic_vector(DATA_WIDTH - 1 downto 0);
-    signal rb           : out std_logic_vector(DATA_WIDTH - 1 downto 0);
-    signal reg1_we      : out std_logic;
-    signal reg1_idx     : out natural range 0 to NB_REGISTERS - 1;
-    signal reg2_we      : out std_logic;
-    signal jump_target  : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
-    signal jump_op      : out jump_type;
-    signal mem_op       : out memory_op_type;
-    signal o_divide_0   : out std_logic) is
-  begin
-    decode_error <= '0';
-    mem_op       <= none;
-    alu_op       <= substract;
-    ra           <= rs;
-    reg1_we      <= '0';
-    reg2_we      <= '0';
-    o_divide_0   <= '1';
-    if (op_code = op_beq) then
-      rb      <= rt;
-      jump_op <= zero;
-    elsif (op_code = op_bne) then
-      rb      <= rt;
-      jump_op <= non_zero;
-    elsif op_code = op_blez then
-      rb      <= std_logic_vector(to_unsigned(0, DATA_WIDTH));
-      jump_op <= lesser_or_zero;
-    elsif op_code = op_bgtz then
-      rb      <= std_logic_vector(to_unsigned(0, DATA_WIDTH));
-      jump_op <= greater;
-    elsif op_code = op_bltz then
-      rb      <= std_logic_vector(to_unsigned(0, DATA_WIDTH));
-      jump_op <= lesser;
-    else
-      rb      <= (others => '0');
-      jump_op <= none;
-    end if;
-    jump_target <= std_logic_vector(unsigned(next_pc) + unsigned(resize(immediate * 4, ADDR_WIDTH)));
-    o_divide_0  <= '1';
-  end procedure do_branch;
-
-  procedure do_immediate(
-    signal op_code      : in  std_logic_vector(5 downto 0);
-    signal immediate    : in  signed(DATA_WIDTH / 2 - 1 downto 0);
-    signal rs           : in  std_logic_vector(DATA_WIDTH - 1 downto 0);
-    signal rti          : in  natural range 0 to NB_REGISTERS - 1;
-    signal decode_error : out std_logic;
-    signal alu_op       : out alu_op_type;
-    signal ra           : out std_logic_vector(DATA_WIDTH - 1 downto 0);
-    signal rb           : out std_logic_vector(DATA_WIDTH - 1 downto 0);
-    signal reg1_we      : out std_logic;
-    signal reg1_idx     : out natural range 0 to NB_REGISTERS - 1;
-    signal reg2_we      : out std_logic;
-    signal jump_target  : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
-    signal jump_op      : out jump_type;
-    signal mem_op       : out memory_op_type;
-    signal o_divide_0   : out std_logic) is
-  begin
-    decode_error                    <= '0';
-    jump_op                         <= none;
-    mem_op                          <= none;
-    ra                              <= rs;
-    rb(DATA_WIDTH / 2 - 1 downto 0) <= std_logic_vector(immediate);
-    reg1_we                         <= '1';
-    reg1_idx                        <= rti;
-    reg2_we                         <= '0';
-    o_divide_0                      <= '1';
-    if (op_code = op_addi) then
-      alu_op <= add;
-      rb(DATA_WIDTH - 1 downto DATA_WIDTH / 2) <=
-        (others => immediate(DATA_WIDTH / 2 - 1));
-    elsif (op_code = op_addiu) then
-      alu_op <= add;
-      rb(DATA_WIDTH - 1 downto DATA_WIDTH / 2) <=
-        (others => immediate(DATA_WIDTH / 2 - 1));
-    elsif (op_code = op_slti) then
-      alu_op <= slt;
-      rb(DATA_WIDTH - 1 downto DATA_WIDTH / 2) <=
-        (others => immediate(DATA_WIDTH / 2 - 1));
-    elsif (op_code = op_sltiu) then
-      alu_op <= slt;
-      rb(DATA_WIDTH - 1 downto DATA_WIDTH / 2) <=
-        (others => immediate(DATA_WIDTH / 2 - 1));
-    elsif (op_code = op_andi) then
-      alu_op <= log_and;
-      rb(DATA_WIDTH - 1 downto DATA_WIDTH / 2) <=
-        std_logic_vector(to_unsigned(0, DATA_WIDTH / 2));
-    elsif (op_code = op_ori) then
-      alu_op <= log_or;
-      rb(DATA_WIDTH - 1 downto DATA_WIDTH / 2) <=
-        std_logic_vector(to_unsigned(0, DATA_WIDTH / 2));
-    elsif (op_code = op_xori) then
-      alu_op <= log_xor;
-      rb(DATA_WIDTH - 1 downto DATA_WIDTH / 2) <=
-        std_logic_vector(to_unsigned(0, DATA_WIDTH / 2));
-    end if;
-    o_divide_0 <= '1';
-  end procedure do_immediate;
-
-  procedure do_rtype(
-    signal op_code      : in  std_logic_vector(5 downto 0);
-    signal func         : in  std_logic_vector(5 downto 0);
-    signal next_pc      : in  std_logic_vector(ADDR_WIDTH - 1 downto 0);
-    signal rs           : in  std_logic_vector(DATA_WIDTH - 1 downto 0);
-    signal rt           : in  std_logic_vector(DATA_WIDTH - 1 downto 0);
-    signal rdi          : in  natural range 0 to NB_REGISTERS - 1;
-    signal decode_error : out std_logic;
-    signal alu_op       : out alu_op_type;
-    signal ra           : out std_logic_vector(DATA_WIDTH - 1 downto 0);
-    signal rb           : out std_logic_vector(DATA_WIDTH - 1 downto 0);
-    signal reg1_we      : out std_logic;
-    signal reg1_idx     : out natural range 0 to NB_REGISTERS - 1;
-    signal reg2_we      : out std_logic;
-    signal reg2_idx     : out natural range 0 to NB_REGISTERS - 1;
-    signal jump_target  : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
-    signal jump_op      : out jump_type;
-    signal mem_op       : out memory_op_type;
-    signal o_divide_0   : out std_logic) is
-    constant reg_zero : std_logic_vector(DATA_WIDTH - 1 downto 0) := (others => '0');
-  begin
-    mem_op <= none;
-    if rt /= reg_zero and (func = func_divu or func = func_div) then
-      o_divide_0 <= '0';
-    else
-      o_divide_0 <= '1';
-    end if;
-
-    if func = func_jr then
-      decode_error <= '0';
-      alu_op       <= all_zero;
-      reg1_we      <= '0';
-      reg2_we      <= '0';
-      jump_target  <= rs;
-      jump_op      <= always;
-    elsif func = func_jalr then
-      decode_error <= '0';
-      alu_op       <= add;
-      ra           <= next_pc;
-      rb           <= (others => '0');
-      reg1_we      <= '1';
-      reg1_idx     <= NB_REGISTERS - 1;
-      reg2_we      <= '0';
-      jump_target  <= rs;
-      jump_op      <= always;
-    elsif func = func_nop then
-      decode_error <= '0';
-      alu_op       <= all_zero;
-      reg1_we      <= '0';
-      reg2_we      <= '0';
-      jump_op      <= none;
-    else
-      ra      <= rs;
-      rb      <= rt;
-      reg1_we <= '1';
-
-      if func = func_mul or func = func_mulu then
-        decode_error <= '0';
-        reg2_we      <= '1';
-        reg1_idx     <= REG_IDX_MFLO;
-        reg2_idx     <= REG_IDX_MFHI;
-        alu_op       <= multiply;
-        jump_op      <= none;
-      elsif func = func_div or func = func_divu then
-        decode_error <= '0';
-        reg2_we      <= '1';
-        reg1_idx     <= REG_IDX_MFLO;
-        reg2_idx     <= REG_IDX_MFHI;
-        alu_op       <= divide;
-        jump_op      <= none;
-      elsif func = func_add or func = func_addu then
-        decode_error <= '0';
-        reg1_idx     <= rdi;
-        reg2_we      <= '0';
-        alu_op       <= add;
-        jump_op      <= none;
-      elsif func = func_sub or func = func_subu then
-        decode_error <= '0';
-        reg1_idx     <= rdi;
-        reg2_we      <= '0';
-        alu_op       <= substract;
-        jump_op      <= none;
-      elsif func = func_slt or func = func_sltu then
-        decode_error <= '0';
-        reg1_idx     <= rti;
-        reg2_we      <= '0';
-        alu_op       <= slt;
-        jump_op      <= none;
-      elsif func = func_and then
-        decode_error <= '0';
-        reg1_idx     <= rdi;
-        reg2_we      <= '0';
-        alu_op       <= log_and;
-        jump_op      <= none;
-      elsif func = func_or then
-        decode_error <= '0';
-        reg1_idx     <= rdi;
-        reg2_we      <= '0';
-        alu_op       <= log_or;
-        jump_op      <= none;
-      elsif func = func_nor then
-        decode_error <= '0';
-        reg1_idx     <= rdi;
-        reg2_we      <= '0';
-        alu_op       <= log_nor;
-        jump_op      <= none;
-      elsif func = func_xor then
-        decode_error <= '0';
-        reg1_idx     <= rdi;
-        reg2_we      <= '0';
-        alu_op       <= log_xor;
-        jump_op      <= none;
-      else
-        decode_error <= '1';
-      end if;
-
-    end if;
-
-  end procedure do_rtype;
-
-  procedure do_jump(
-    signal op_code      : in  std_logic_vector(5 downto 0);
-    signal next_pc      : in  std_logic_vector(ADDR_WIDTH - 1 downto 0);
-    signal pc_displace  : in  std_logic_vector(25 downto 0);
-    signal decode_error : out std_logic;
-    signal alu_op       : out alu_op_type;
-    signal ra           : out std_logic_vector(DATA_WIDTH - 1 downto 0);
-    signal rb           : out std_logic_vector(DATA_WIDTH - 1 downto 0);
-    signal reg1_we      : out std_logic;
-    signal reg1_idx     : out natural range 0 to NB_REGISTERS - 1;
-    signal reg2_we      : out std_logic;
-    signal jump_target  : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
-    signal jump_op      : out jump_type;
-    signal mem_op       : out memory_op_type;
-    signal o_divide_0   : out std_logic) is
-  begin
-    decode_error <= '0';
-    reg2_we      <= '0';
-    jump_op      <= always;
-    mem_op       <= none;
-    o_divide_0   <= '1';
-    jump_target  <= next_pc(ADDR_WIDTH -1 downto pc_displace'length) & pc_displace;
-    if op_code = op_jalr then
-      alu_op   <= add;
-      ra       <= next_pc;
-      rb       <= (others => '0');
-      reg1_we  <= '1';
-      reg1_idx <= NB_REGISTERS - 1;
-    else
-      alu_op  <= all_zero;
-      reg1_we <= '0';
-    end if;
-  end procedure do_jump;
-
-  procedure do_memory(
-    signal op_code      : in  std_logic_vector(5 downto 0);
-    signal rs           : in  std_logic_vector(DATA_WIDTH - 1 downto 0);
-    signal rt           : in  std_logic_vector(DATA_WIDTH - 1 downto 0);
-    signal rti          : in  natural range 0 to NB_REGISTERS - 1;
-    signal immediate    : in  signed(DATA_WIDTH / 2 - 1 downto 0);
-    signal decode_error : out std_logic;
-    signal alu_op       : out alu_op_type;
-    signal ra           : out std_logic_vector(DATA_WIDTH - 1 downto 0);
-    signal rb           : out std_logic_vector(DATA_WIDTH - 1 downto 0);
-    signal reg1_we      : out std_logic;
-    signal reg1_idx     : out natural range 0 to NB_REGISTERS - 1;
-    signal reg2_we      : out std_logic;
-    signal jump_target  : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
-    signal jump_op      : out jump_type;
-    signal mem_op       : out memory_op_type;
-    signal mem_data     : out std_logic_vector(DATA_WIDTH - 1 downto 0);
-    signal o_divide_0   : out std_logic) is
-  begin
-    decode_error <= '0';
-    reg2_we      <= '0';
-    jump_op      <= none;
-    o_divide_0   <= '1';
-    if op_code = op_lw then
-      mem_op   <= loadw;
-      alu_op   <= add;
-      ra       <= rs;
-      rb       <= std_logic_vector(resize(immediate, DATA_WIDTH));
-      reg1_we  <= '1';
-      reg1_idx <= rti;
-    elsif op_code = op_lbu then
-      mem_op   <= load8;
-      alu_op   <= add;
-      ra       <= rs;
-      rb       <= std_logic_vector(resize(immediate, DATA_WIDTH));
-      reg1_we  <= '1';
-      reg1_idx <= rti;
-    elsif op_code = op_lb then
-      mem_op   <= load8_signextend32;
-      alu_op   <= add;
-      ra       <= rs;
-      rb       <= std_logic_vector(resize(immediate, DATA_WIDTH));
-      reg1_we  <= '1';
-      reg1_idx <= rti;
-    elsif op_code = op_sw then
-      mem_op   <= storew;
-      alu_op   <= add;
-      ra       <= rs;
-      rb       <= std_logic_vector(resize(immediate, DATA_WIDTH));
-      reg1_we  <= '0';
-      mem_data <= rt;
-    elsif op_code = op_sb then
-      mem_op   <= store8;
-      alu_op   <= add;
-      ra       <= rs;
-      rb       <= std_logic_vector(resize(immediate, DATA_WIDTH));
-      reg1_we  <= '0';
-      mem_data <= rt;
-    end if;
-  end procedure do_memory;
-
-  procedure do_lui(
-    signal rt           : in  std_logic_vector(DATA_WIDTH - 1 downto 0);
-    signal immediate    : in  signed(DATA_WIDTH / 2 - 1 downto 0);
-    signal decode_error : out std_logic;
-    signal alu_op       : out alu_op_type;
-    signal ra           : out std_logic_vector(DATA_WIDTH - 1 downto 0);
-    signal rb           : out std_logic_vector(DATA_WIDTH - 1 downto 0);
-    signal reg1_we      : out std_logic;
-    signal reg1_idx     : out natural range 0 to NB_REGISTERS - 1;
-    signal reg2_we      : out std_logic;
-    signal jump_target  : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
-    signal jump_op      : out jump_type;
-    signal mem_op       : out memory_op_type;
-    signal o_divide_0   : out std_logic) is
-  begin
-    decode_error                             <= '0';
-    jump_op                                  <= none;
-    alu_op                                   <= add;
-    ra(DATA_WIDTH - 1 downto DATA_WIDTH / 2) <= std_logic_vector(immediate);
-    ra(DATA_WIDTH / 2 - 1 downto 0)          <= (others => '0');
-    rb                                       <= (others => '0');
-    reg1_we                                  <= '1';
-    reg1_idx                                 <= rti;
-    reg2_we                                  <= '0';
-    o_divide_0                               <= '1';
-  end procedure do_lui;
+  type jt_t is (jt_rs, jt_rt, jt_absolute, jt_pcrelative);
+  signal jt_src             : jt_t;
+  signal jt_addr_absolute   : addr_t;
+  signal jt_addr_pcrelative : addr_t;
+  signal jt_mux_addr        : addr_t;
+  signal jt_mux_reg         : addr_t;
 
 begin  -- architecture rtl
 
@@ -601,6 +200,7 @@ begin  -- architecture rtl
     port map (
       clk           => clk,
       rst           => rst,
+      stall_req     => stall_req,
       a_idx         => rsi,
       b_idx         => rti,
       a             => rfile_rs,
@@ -615,57 +215,330 @@ begin  -- architecture rtl
 
   next_pc <= std_logic_vector(unsigned(i_pc) + 4);
 
-  process(rst, clk, stall_req, kill_req, is_branch, is_immediate, is_rtype,
-          is_jump, o_reg1_idx, o_reg2_idx, alu_op)
-    variable reg_zero : std_logic_vector(DATA_WIDTH - 1 downto 0) := (others => '0');
+  op_code <= i_instruction(31 downto 26);
+  func    <= i_instruction(5 downto 0);
+
+  immediate <= (others => '0') when rst = '1' else signed(i_instruction(15 downto 0));
+
+  instr_tag_p : process(clk, rst, kill_req, stall_req, op_code, func,
+                        i_instr_tag)
+    variable is_br   : boolean;
+    variable is_jr   : boolean;
+    variable is_jump : boolean;
+    variable itag    : instr_tag_t;
+  begin
+    itag := i_instr_tag;
+
+    is_br := (op_code = op_beq) or (op_code = op_bne) or (op_code = op_blez) or
+             (op_code = op_bgtz) or (op_code = op_bltz);
+    is_jr   := (op_code = op_rtype) and (func = func_jr);
+    is_jump := (op_code = op_j or op_code = op_jalr);
+
+    itag := get_instr_change_is_branch(
+      get_instr_change_is_ja(
+        get_instr_change_is_jr(itag, is_jr), is_jump), is_br);
+
+    if rst = '1' then
+      o_instr_tag <= INSTR_TAG_NONE;
+    elsif rising_edge(clk) then
+      if kill_req = '1' then
+        o_instr_tag <= INSTR_TAG_NONE;
+      elsif stall_req = '1' then
+      else
+        o_instr_tag <= itag;
+      end if;
+    end if;
+  end process instr_tag_p;
+
+  alu : process(clk, rst, kill_req, stall_req, op_code, func, alu_op)
   begin
     if rst = '1' then
-      do_reset(decode_error, alu_op, ra, rb, o_reg1.we, o_reg1_idx, o_reg2.we,
-               o_reg2_idx, o_jump_target, o_jump_op, o_mem_op, o_divide_0,
-               o_instr_tag);
-    elsif kill_req = '1' and rising_edge(clk) then
-      do_kill_pipeline_stage(decode_error, alu_op, ra, rb, o_reg1.we, o_reg1_idx,
-                             o_reg2.we, o_reg2_idx, o_jump_target, o_jump_op,
-                             o_mem_op, o_divide_0, o_instr_tag);
-    elsif stall_req = '0' and rising_edge(clk) then
-      if is_branch = '1' then
-        do_branch(op_code, next_pc, immediate, rs, rt,
-                  decode_error, alu_op, ra, rb, o_reg1.we, o_reg1_idx,
-                  o_reg2.we, o_jump_target, o_jump_op, o_mem_op, o_divide_0);
-      elsif is_immediate = '1' then
-        do_immediate(op_code, immediate, rs, rti,
-                     decode_error, alu_op, ra, rb, o_reg1.we, o_reg1_idx,
-                     o_reg2.we, o_jump_target, o_jump_op, o_mem_op, o_divide_0);
-      elsif is_rtype = '1' then
-        do_rtype(op_code, func, next_pc, rs, rt, rdi,
-                 decode_error, alu_op, ra, rb, o_reg1.we, o_reg1_idx,
-                 o_reg2.we, o_reg2_idx, o_jump_target, o_jump_op, o_mem_op,
-                 o_divide_0);
-      elsif is_jump = '1' then
-        do_jump(op_code, next_pc, pc_displace, decode_error, alu_op,
-                ra, rb, o_reg1.we, o_reg1_idx, o_reg2.we, o_jump_target,
-                o_jump_op, o_mem_op, o_divide_0);
-      elsif is_memory = '1' then
-        do_memory(op_code, rs, rt, rti, immediate, decode_error, alu_op,
-                  ra, rb, o_reg1.we, o_reg1.idx, o_reg2.we, o_jump_target,
-                  o_jump_op, o_mem_op, o_mem_data, o_divide_0);
-      elsif op_code = op_lui then
-        do_lui(rt, immediate, decode_error, alu_op,
-               ra, rb, o_reg1.we, o_reg1_idx, o_reg2.we, o_jump_target,
-               o_jump_op, o_mem_op, o_divide_0);
+      alu_op <= all_zero;
+    elsif rising_edge(clk) then
+      if kill_req = '1' then
+        alu_op <= all_zero;
+      elsif stall_req = '1' then
+      else
+        case op_code is
+          when op_beq | op_bne | op_blez | op_bgtz | op_bltz =>
+            alu_op <= substract;
+          when op_lw | op_lbu | op_lb | op_sw | op_sb =>
+            alu_op <= add;
+          when op_lui =>
+            alu_op <= add;
+          when op_addi | op_addiu => alu_op <= add;
+          when op_slti | op_sltiu => alu_op <= slt;
+          when op_andi            => alu_op <= log_and;
+          when op_ori             => alu_op <= log_or;
+          when op_xori            => alu_op <= log_xor;
+          when op_rtype =>
+            case func is
+              when func_mul | func_mulu => alu_op <= multiply;
+              when func_div | func_divu => alu_op <= divide;
+              when func_add | func_addu => alu_op <= add;
+              when func_sub | func_subu => alu_op <= substract;
+              when func_slt | func_sltu => alu_op <= slt;
+              when func_and             => alu_op <= log_and;
+              when func_or              => alu_op <= log_or;
+              when func_nor             => alu_op <= log_nor;
+              when func_xor             => alu_op <= log_xor;
+              when others               => alu_op <= all_zero;
+            end case;
+          when others => alu_op <= all_zero;
+        end case;
       end if;
-      o_instr_tag <=
-        get_instr_change_is_branch(
-          get_instr_change_is_ja(
-            get_instr_change_is_jr(i_instr_tag, is_jr = '1'),
-            is_jump = '1'),
-          is_branch = '1');
+    end if;
+    o_alu_op <= alu_op;
+  end process alu;
+
+  registers : process(clk, stall_req, op_code, func, i_instruction, rimmediate,
+                      ra_src, rb_src, bp_rs, bp_rt, rfile_rs, rfile_rt,
+                      rimmediate_unsigned, rimmediate_signextend)
+    variable asrc, bsrc : reg_src;
+  begin
+    rsi <= to_integer(unsigned(i_instruction(25 downto 21)));
+    rti <= to_integer(unsigned(i_instruction(20 downto 16)));
+    rdi <= to_integer(unsigned(i_instruction(15 downto 11)));
+
+    rimmediate_signextend(immediate'length - 1 downto 0) <= rimmediate;
+    rimmediate_signextend(rimmediate_signextend'length - 1 downto rimmediate'length)
+      <= (others => rimmediate(rimmediate'length - 1));
+    rimmediate_unsigned(rimmediate'length - 1 downto 0) <= rimmediate;
+    rimmediate_unsigned(rimmediate_unsigned'length - 1 downto rimmediate'length)
+      <= (others => '0');
+
+    if rising_edge(clk) and stall_req = '0' then
+      rimmediate <= i_instruction(rimmediate'length - 1 downto 0);
+
+      bp_rs <= i_bp_reg1;
+      bp_rt <= i_bp_reg2;
+
+      case op_code is
+        when op_rtype =>
+          asrc := bypassed_regfile;
+          bsrc := bypassed_regfile;
+        when op_addi | op_addiu | op_slti | op_sltiu |
+          op_andi | op_ori | op_xori =>
+          asrc := bypassed_regfile;
+          bsrc := immediate_signextend;
+        when op_lw | op_lbu | op_lb | op_sw | op_sb =>
+          asrc := bypassed_regfile;
+          bsrc := immediate_unsigned;
+        when op_lui =>
+          asrc := zero;
+          bsrc := immediate_unsigned;
+        when others =>
+          asrc := bypassed_regfile;
+          bsrc := bypassed_regfile;
+      end case;
+      ra_src <= asrc;
+      rb_src <= bsrc;
     end if;
 
-    o_reg1.idx <= o_reg1_idx;
-    o_reg2.idx <= o_reg2_idx;
-    o_alu_op   <= alu_op;
-  end process;
+    if ra_src = bypassed_regfile or ra_src = zero then
+      if ra_src = bypassed_regfile then
+        if bp_rs.we = '1' then
+          ra <= bp_rs.data;
+        else
+          ra <= rfile_rs;
+        end if;
+      else
+        ra <= r0;
+      end if;
+    else
+      ra <= r0;
+    end if;
+
+    if rb_src = bypassed_regfile or rb_src = zero then
+      if rb_src = bypassed_regfile then
+        if bp_rt.we = '1' then
+          rb <= bp_rt.data;
+        else
+          rb <= rfile_rt;
+        end if;
+      else
+        rb <= r0;
+      end if;
+    else
+      if rb_src = immediate_unsigned then
+        rb <= rimmediate_unsigned;
+      else
+        rb <= rimmediate_signextend;
+      end if;
+    end if;
+  end process registers;
+
+  rwb_reg1_we <= i_rwb_reg1.we;
+  rwb_reg2_we <= i_rwb_reg2.we;
+
+  rtargets : process(rst, clk, kill_req, stall_req, op_code, func, rsi, rti, rdi)
+    variable reg1_we  : std_ulogic;
+    variable reg1_idx : natural range 0 to NB_REGISTERS - 1;
+    variable reg2_we  : std_ulogic;
+    variable reg2_idx : natural range 0 to NB_REGISTERS - 1;
+  begin
+    reg1_we  := '0';
+    reg2_we  := '0';
+    reg1_idx := 0;
+    reg2_idx := 0;
+
+    case op_code is
+      when op_rtype =>
+        case func is
+          when func_mul | func_mulu | func_div | func_divu =>
+            reg1_we  := '1';
+            reg1_idx := REG_IDX_MFLO;
+            reg2_we  := '1';
+            reg2_idx := REG_IDX_MFHI;
+          when func_nop =>
+          when others =>
+            reg1_we  := '1';
+            reg1_idx := rdi;
+        end case;
+      when op_addi | op_addiu | op_slti | op_sltiu |
+        op_andi | op_ori | op_xori =>
+        reg1_we  := '1';
+        reg1_idx := rti;
+      when op_lw | op_lbu | op_lb =>
+        reg1_we  := '1';
+        reg1_idx := rti;
+      when op_lui =>
+        reg1_we  := '1';
+        reg1_idx := rti;
+      when op_jalr =>
+        reg1_we  := '1';
+        reg1_idx := NB_REGISTERS - NB_REGISTERS_SPECIAL - 1;
+      when others =>
+    end case;
+
+    if rst = '1' then
+      o_reg1.we      <= '0';
+      o_reg2.we      <= '0';
+      o_reg1.idx     <= 0;
+      o_reg2.idx     <= 0;
+    else
+      if rising_edge(clk) then
+        if kill_req = '1' then
+          o_reg1.we      <= '0';
+          o_reg2.we      <= '0';
+          o_reg1.idx     <= 0;
+          o_reg2.idx     <= 0;
+          o_src_reg1_idx <= 0;
+          o_src_reg2_idx <= 0;
+        elsif stall_req = '1' then
+        else
+          o_reg1.we      <= reg1_we;
+          o_reg2.we      <= reg2_we;
+          o_reg1.idx     <= reg1_idx;
+          o_reg2.idx     <= reg2_idx;
+        end if;
+      end if;
+    end if;
+    o_src_reg1_idx <= rsi;
+    o_src_reg2_idx <= rti;
+  end process rtargets;
+
+  memory_p : process(rst, clk, kill_req, stall_req, op_code, rimmediate_signextend)
+    variable mo : memory_op_type;
+  begin
+    case op_code is
+      when op_lw  => mo := loadw;
+      when op_lbu => mo := load8;
+      when op_lb  => mo := load8_signextend32;
+      when op_sw  => mo := storew;
+      when op_sb  => mo := store8;
+      when others => mo := none;
+    end case;
+
+    if rst = '1' then
+      o_mem_op <= none;
+    elsif rising_edge(clk) then
+      if kill_req = '1' then
+        o_mem_op <= none;
+      elsif stall_req = '1' then
+      else
+        o_mem_op <= mo;
+      end if;
+    end if;
+
+    o_mem_data <= rimmediate_signextend;
+  end process memory_p;
+
+  jumper_op : process(rst, clk, stall_req, kill_req, op_code, func)
+    variable jump_op : jump_type;
+  begin
+    case op_code is
+      when op_rtype =>
+        if func = func_jr or func = func_jalr then
+          jump_op := always;
+        else
+          jump_op := none;
+        end if;
+      when op_beq =>
+        jump_op := zero;
+      when op_bne =>
+        jump_op := non_zero;
+      when op_blez =>
+        jump_op := lesser_or_zero;
+      when op_bgtz =>
+        jump_op := greater;
+      when op_bltz =>
+        jump_op := lesser;
+      when others =>
+        jump_op := none;
+    end case;
+
+    if rst = '1' then
+      o_jump_op <= none;
+    elsif rising_edge(clk) then
+      if kill_req = '1' then
+        o_jump_op <= none;
+      elsif stall_req = '1' then
+      else
+        o_jump_op <= jump_op;
+      end if;
+    end if;
+  end process jumper_op;
+
+  jumper_target : process(clk, stall_req, op_code, func, i_instruction,
+                          next_pc, jt_mux_reg, jt_src,
+                          jt_addr_pcrelative, jt_addr_absolute)
+    variable src : jt_t;
+  begin
+    pc_displace <= i_instruction(23 downto 0) & b"00";
+
+    case op_code is
+      when op_rtype =>
+        if func = func_jr then
+          src := jt_rs;
+        else
+          src := jt_absolute;
+        end if;
+      when op_beq | op_bne | op_blez | op_bgtz | op_bltz =>
+        src := jt_pcrelative;
+      when others =>
+        src := jt_absolute;
+    end case;
+
+    if rising_edge(clk) and stall_req = '0' then
+      jt_src           <= src;
+      jt_addr_absolute <= next_pc(ADDR_WIDTH - 1 downto pc_displace'length) & pc_displace;
+      jt_addr_pcrelative <= std_logic_vector(unsigned(next_pc) +
+                                             unsigned(resize(immediate * 4, ADDR_WIDTH)));
+    end if;
+
+    if jt_src = jt_absolute then
+      jt_mux_reg <= jt_addr_absolute;
+    else
+      jt_mux_reg <= jt_addr_pcrelative;
+    end if;
+
+    if jt_src = jt_rs then
+      o_jump_target <= ra;
+    else
+      o_jump_target <= jt_mux_reg;
+    end if;
+  end process jumper_target;
 
   debug : process(rst, clk, stall_req, kill_req)
   begin
@@ -679,45 +552,4 @@ begin  -- architecture rtl
     end if;
   end process debug;
 
-  op_code <= i_instruction(31 downto 26);
-  func    <= i_instruction(5 downto 0);
-
-  rsi          <= 0               when rst = '1' else to_integer(unsigned(i_instruction(25 downto 21)));
-  rti          <= 0               when rst = '1' else to_integer(unsigned(i_instruction(20 downto 16)));
-  rdi          <= 0               when rst = '1' else to_integer(unsigned(i_instruction(15 downto 11)));
-  immediate    <= (others => '0') when rst = '1' else signed(i_instruction(15 downto 0));
-  pc_displace  <= i_instruction(23 downto 0) & b"00";
-  is_immediate <= '1'             when (op_code >= op_addi and op_code <= op_xori) or
-                  (op_code = op_lui) or
-                  (op_code = op_lb) or
-                  (op_code = op_lw) or
-                  (op_code = op_lbu) or
-                  (op_code = op_sb) or
-                  (op_code = op_sw) else '0';
-  is_branch <= '1' when
-               (op_code = op_beq) or
-               (op_code = op_bne) or
-               (op_code = op_blez) or
-               (op_code = op_bgtz) or
-               (op_code = op_bltz) else '0';
-  is_rtype  <= '1' when (op_code = op_rtype)                      else '0';
-  is_jump   <= '1' when (op_code = op_j or op_code = op_jalr)     else '0';
-  is_jr     <= '1' when (op_code = op_rtype) and (func = func_jr) else '0';
-  is_memory <= '1' when (op_code = op_lui) or
-               (op_code = op_lb) or
-               (op_code = op_lw) or
-               (op_code = op_lbu) or
-               (op_code = op_sb) or
-               (op_code = op_sw) else '0';
-
-  rwb_reg1_we <= i_rwb_reg1.we;
-  rwb_reg2_we <= i_rwb_reg2.we;
-  rs <= i_bp_reg1.data when i_bp_reg1.we else rfile_rs;
-  rt <= i_bp_reg2.data when i_bp_reg2.we else rfile_rt;
-
-  o_src_reg1_idx <= rsi;
-  o_src_reg2_idx <= rti;
-
 end architecture rtl;
-
--------------------------------------------------------------------------------

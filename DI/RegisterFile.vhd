@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-12
--- Last update: 2016-11-27
+-- Last update: 2017-01-03
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -35,6 +35,7 @@ entity RegisterFile is
   port (
     clk           : in  std_logic;
     rst           : in  std_logic;
+    stall_req     : in  std_logic;
     a_idx         : in  natural range 0 to NB_REGISTERS + NB_REGISTERS_SPECIAL - 1;
     b_idx         : in  natural range 0 to NB_REGISTERS + NB_REGISTERS_SPECIAL - 1;
     -- Writeback register
@@ -44,7 +45,7 @@ entity RegisterFile is
     rwb_reg2_we   : in  std_logic;
     rwb_reg2_idx  : in  natural range 0 to NB_REGISTERS + NB_REGISTERS_SPECIAL - 1;
     rwb_reg2_data : in  std_logic_vector(DATA_WIDTH - 1 downto 0);
-    -- Output read registers
+    -- Output read registers, set on clk rising edge
     a             : out std_logic_vector(DATA_WIDTH - 1 downto 0);
     b             : out std_logic_vector(DATA_WIDTH - 1 downto 0)
     );
@@ -105,6 +106,8 @@ begin  -- architecture rtl
   process(rst, clk, rwb_reg1_we, rwb_reg2_we)
   begin
     if rst = '1' then
+      a <= (others => 'X');
+      b <= (others => 'X');
     elsif rising_edge(clk) then
       if rwb_reg1_we = '1' then
         registers(rwb_reg1_idx) <= rwb_reg1_data;
@@ -112,11 +115,13 @@ begin  -- architecture rtl
       if rwb_reg2_we = '1' then
         registers(rwb_reg2_idx) <= rwb_reg2_data;
       end if;
+
+      if stall_req = '0' then
+        a <= registers(a_idx);
+        b <= registers(b_idx);
+      end if;
     end if;
   end process;
-
-  a <= registers(a_idx);
-  b <= registers(b_idx);
 
 end architecture rtl;
 
