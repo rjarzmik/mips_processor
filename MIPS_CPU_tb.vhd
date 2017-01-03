@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-12
--- Last update: 2017-01-01
+-- Last update: 2017-01-03
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -44,7 +44,7 @@ architecture rtl of MIPS_CPU_tb is
   constant DATA_WIDTH           : integer := 32;
   constant NB_REGISTERS_GP      : integer := 32;
   constant NB_REGISTERS_SPECIAL : integer := 2;
-  constant DEBUG : boolean := true;
+  constant DEBUG                : boolean := true;
 
   -- clock
   signal Clk  : std_logic := '1';
@@ -52,8 +52,8 @@ architecture rtl of MIPS_CPU_tb is
   signal stop : std_logic := '0';
 
   -- L2 connections
-  signal cls_creq  : cache_request_t;
-  signal cls_cresp : cache_response_t;
+  signal cls_creq            : cache_request_t;
+  signal cls_cresp           : cache_response_t;
   signal o_memory_req        : std_logic := '0';
   signal o_memory_we         : std_logic := '0';
   signal o_memory_addr       : addr_t;
@@ -326,7 +326,7 @@ begin  -- architecture rtl
       o_dbg_if_instr_tag       => dbg_if_itag,
       o_dbg_di_instr_tag       => dbg_di_itag,
       o_dbg_ex_instr_tag       => dbg_ex_itag,
-      o_dbg_mem_mid_instr_tag      => dbg_mem_mid_itag,
+      o_dbg_mem_mid_instr_tag  => dbg_mem_mid_itag,
       o_dbg_mem_instr_tag      => dbg_mem_itag,
       o_dbg_wb_instr_tag       => dbg_wb_itag,
       o_dbg_if_prediction      => dbg_if_prediction
@@ -369,9 +369,9 @@ begin  -- architecture rtl
       o_memory_valid      => i_memory_valid);
 
   -- reset
-  Rst <= '0' or stop after 30 ps;
+  Rst <= '0' or stop          after 30 ps;
   -- clock generation
-  Clk <= not Clk     after 5 ps;
+  Clk <= not stop and not Clk after 5 ps;
 
   -- waveform generation
   WaveGen_Proc : process
@@ -393,39 +393,41 @@ begin  -- architecture rtl
   --alias dbg_mem2_pc is
   --  <<signal DUT.mem_stage.r2_dbg_mem_pc : std_logic_vector(ADDR_WIDTH -1 downto 0) >>;
   begin
-    if dbg_ife_killed = '1' or dbg_jump_pc = '1' then
-      fkill := '1';
-    else
-      fkill := '0';
-    end if;
+    if not stop then
+      if dbg_ife_killed = '1' or dbg_jump_pc = '1' then
+        fkill := '1';
+      else
+        fkill := '0';
+      end if;
 
-    if rising_edge(clk) then
-      cycle := cycle + 1;
-      report "[" & integer'image(cycle) & "] " &
-        dbg_get_stage_string("if", rst, fkill, dbg_ife_stalled, dbg_if_pc, dbg_if_itag) & " " &
-        dbg_get_stage_string("di", rst, dbg_di_killed, dbg_di_stalled, dbg_di_pc, dbg_di_itag) & " " &
-        dbg_get_stage_string("ex", rst, dbg_ex_killed, dbg_ex_stalled, dbg_ex_pc, dbg_ex_itag) & " " &
-        dbg_get_stage_string("mem1", rst, dbg_mem_killed, dbg_mem_stalled, dbg_mem1_pc, dbg_mem_itag) & " " &
-        dbg_get_stage_string("mem2", rst, dbg_mem_killed, dbg_mem_stalled, dbg_mem2_pc, dbg_mem_mid_itag) & " " &
-        dbg_get_stage_string("wb", rst, dbg_wb_killed, dbg_wb_stalled, dbg_wb_pc, dbg_wb_itag) & " " &
-        dbg_get_done_string("done", rst, dbg_commited_itag, dbg_commited_pc) & " " &
-        dbg_get_regwrite_string(dbg_wb2di_reg1) &
-        dbg_get_regwrite_string(dbg_wb2di_reg2) &
-        dbg_get_jump_string(dbg_jump_pc, dbg_jump_target) & " " &
-        dbg_get_prediction_string(dbg_if_prediction, last_prediction);
-      if dbg_commited_pc /= unusable_op then
-        if to_integer(unsigned(dbg_commited_pc)) = 0 then
-          passed_by_addr0 := passed_by_addr0 + 1;
+      if rising_edge(clk) then
+        cycle := cycle + 1;
+        report "[" & integer'image(cycle) & "] " &
+          dbg_get_stage_string("if", rst, fkill, dbg_ife_stalled, dbg_if_pc, dbg_if_itag) & " " &
+          dbg_get_stage_string("di", rst, dbg_di_killed, dbg_di_stalled, dbg_di_pc, dbg_di_itag) & " " &
+          dbg_get_stage_string("ex", rst, dbg_ex_killed, dbg_ex_stalled, dbg_ex_pc, dbg_ex_itag) & " " &
+          dbg_get_stage_string("mem1", rst, dbg_mem_killed, dbg_mem_stalled, dbg_mem1_pc, dbg_mem_itag) & " " &
+          dbg_get_stage_string("mem2", rst, dbg_mem_killed, dbg_mem_stalled, dbg_mem2_pc, dbg_mem_mid_itag) & " " &
+          dbg_get_stage_string("wb", rst, dbg_wb_killed, dbg_wb_stalled, dbg_wb_pc, dbg_wb_itag) & " " &
+          dbg_get_done_string("done", rst, dbg_commited_itag, dbg_commited_pc) & " " &
+          dbg_get_regwrite_string(dbg_wb2di_reg1) &
+          dbg_get_regwrite_string(dbg_wb2di_reg2) &
+          dbg_get_jump_string(dbg_jump_pc, dbg_jump_target) & " " &
+          dbg_get_prediction_string(dbg_if_prediction, last_prediction);
+        if dbg_commited_pc /= unusable_op then
+          if to_integer(unsigned(dbg_commited_pc)) = 0 then
+            passed_by_addr0 := passed_by_addr0 + 1;
+          end if;
         end if;
+
+        if passed_by_addr0 > 4 then
+          report "PC rolled over to 0, ending simulation." severity error;
+          stop <= '1';
+        end if;
+
+        last_prediction := dbg_if_prediction;
+
       end if;
-
-      if passed_by_addr0 > 4 then
-        report "PC rolled over to 0, ending simulation." severity error;
-        stop <= '1';
-      end if;
-
-      last_prediction := dbg_if_prediction;
-
     end if;
   end process debug_proc;
 
@@ -439,7 +441,7 @@ begin  -- architecture rtl
       i_mem_rd_valid <= '0';
       i_mem_rd_data  <= (others => '0');
       i_mem_wr_ack   <= '0';
-    elsif rising_edge(clk) then         -- rising clock edge
+    elsif stop = '0' and rising_edge(clk) then         -- rising clock edge
       i_mem_wr_ack <= '0';
       if o_mem_wr_en = '1' then
         i_mem_rd_valid <= '0';
