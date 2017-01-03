@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-12-10
--- Last update: 2016-12-12
+-- Last update: 2017-01-03
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -187,7 +187,7 @@ begin  -- architecture rtl
     if rst = '1' then
       alloc_itag <= get_next_instr_tag(INSTR_TAG_FIRST_VALID, 2);
     elsif rising_edge(clk) then
-      if i_mispredict then
+      if i_mispredict = '1' then
         alloc_itag <= get_next_instr_tag(alloc_itag, 2);
       elsif stall = '0' then
         alloc_itag <= get_next_instr_tag(alloc_itag, 1);
@@ -204,7 +204,7 @@ begin  -- architecture rtl
       o_itrack_req_pc1 <= '1';
       o_itrack_req_pc2 <= '1';
     elsif rising_edge(clk) then
-      if i_mispredict then
+      if i_mispredict = '1' then
         o_itrack_req_pc1 <= '1';
         o_itrack_req_pc2 <= '1';
       elsif stall = '1' then
@@ -231,7 +231,7 @@ begin  -- architecture rtl
       pc_next_itag        <= get_next_instr_tag(INSTR_TAG_FIRST_VALID, 1);
       jump_while_stalling <= false;
     elsif rising_edge(clk) then
-      if i_mispredict then
+      if i_mispredict = '1' then
         -- Mispredict, break PC flow
         --- So far, don't use any recorded branch history, use next 2 PCs
         pc      <= i_mispredict_correct_pc;
