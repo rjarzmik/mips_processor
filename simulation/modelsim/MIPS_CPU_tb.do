@@ -4,6 +4,9 @@ add wave -group Overview -position end -radix hex sim:/mips_cpu_tb/DUT/clk
 add wave -group Overview -position end -radix hex sim:/mips_cpu_tb/DUT/o_dbg_*_pc
 add wave -group Overview -position end -radix hex sim:/mips_cpu_tb/DUT/di_instr_tag.tag
 add wave -group Overview -position end -radix hex sim:/mips_cpu_tb/DUT/ex_instr_tag.tag
+add wave -group Overview -position end -radix hex sim:/mips_cpu_tb/DUT/mem_m0_instr_tag.tag
+add wave -group Overview -position end -radix hex sim:/mips_cpu_tb/DUT/mem_m1_instr_tag.tag
+add wave -group Overview -position end -radix hex sim:/mips_cpu_tb/DUT/mem_m2_instr_tag.tag
 add wave -group Overview -position end -radix hex sim:/mips_cpu_tb/DUT/wb_instr_tag.tag
 add wave -group Overview -position end -radix hex sim:/mips_cpu_tb/DUT/commited_instr_tag.tag
 
