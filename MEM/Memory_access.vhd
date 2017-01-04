@@ -76,8 +76,9 @@ entity Memory_access is
     o_reg2        : out register_port_type;
     o_jump_target : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
     o_is_jump     : out std_logic;
-    o_instr_tag      : out instr_tag_t;
-    o_mid_instr_tag  : out instr_tag_t;
+    o_m0_instr_tag  : out instr_tag_t;
+    o_m1_instr_tag  : out instr_tag_t;
+    o_m2_instr_tag  : out instr_tag_t;
 
     -- Control hazard outputs. Needed to check RAW hazards
     o_stage1_reg1 : out register_port_type;
@@ -98,9 +99,9 @@ entity Memory_access is
 
     -- debug signals
     i_dbg_mem_pc  : in  std_logic_vector(ADDR_WIDTH - 1 downto 0);
+    o_dbg_mem0_pc : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
     o_dbg_mem1_pc : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
-    o_dbg_mem2_pc : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
-    o_dbg_mem3_pc : out std_logic_vector(ADDR_WIDTH - 1 downto 0)
+    o_dbg_mem2_pc : out std_logic_vector(ADDR_WIDTH - 1 downto 0)
     );
 
 end entity Memory_access;
@@ -190,6 +191,7 @@ begin  -- architecture rtl
       r1_reg2.idx    <= 0;
       r1_reg2.data   <= (others => '0');
       r1_instr_tag   <= INSTR_TAG_NONE;
+      r1_dbg_mem_pc <= (others => 'X');
       r2_mem_op      <= none;
       r2_jump_target <= (others => '0');
       r2_is_jump     <= '0';
@@ -200,6 +202,7 @@ begin  -- architecture rtl
       r2_reg2.idx    <= 0;
       r2_reg2.data   <= (others => '0');
       r2_instr_tag   <= INSTR_TAG_NONE;
+      r2_dbg_mem_pc <= (others => 'X');
     elsif rising_edge(clk) then         -- rising clock edge
       if kill_req = '1' then
         r1_mem_op      <= none;
@@ -212,6 +215,7 @@ begin  -- architecture rtl
         r1_reg2.idx    <= 0;
         r1_reg2.data   <= (others => '0');
         r1_instr_tag   <= INSTR_TAG_NONE;
+        r1_dbg_mem_pc  <= (others => 'X');
         r2_mem_op      <= none;
         r2_jump_target <= (others => '0');
         r2_is_jump     <= '0';
@@ -222,6 +226,7 @@ begin  -- architecture rtl
         r2_reg2.idx    <= 0;
         r2_reg2.data   <= (others => '0');
         r2_instr_tag   <= INSTR_TAG_NONE;
+        r2_dbg_mem_pc  <= (others => 'X');
       elsif stall_req = '0' then
         if s_need_stall = '0' then
           r1_reg1.we   <= i_reg1.we;
@@ -236,7 +241,8 @@ begin  -- architecture rtl
           r1_is_jump     <= i_is_jump;
           r1_jump_target <= i_jump_target;
 
-          r1_instr_tag <= i_instr_tag;
+          r1_instr_tag  <= i_instr_tag;
+          r1_dbg_mem_pc <= i_dbg_mem_pc;
 
           r2_reg1.we   <= r1_reg1.we;
           r2_reg1.idx  <= r1_reg1.idx;
@@ -250,7 +256,8 @@ begin  -- architecture rtl
           r2_is_jump     <= r1_is_jump;
           r2_jump_target <= r1_jump_target;
 
-          r2_instr_tag <= r1_instr_tag;
+          r2_instr_tag  <= r1_instr_tag;
+          r2_dbg_mem_pc <= r1_dbg_mem_pc;
         end if;
       end if;
     end if;
@@ -319,8 +326,6 @@ begin  -- architecture rtl
       o_jump_target <= (others => '0');
       o_is_jump     <= '0';
       o_exception   <= '0';
-
-      o_instr_tag <= INSTR_TAG_NONE;
     elsif rising_edge(clk) then
       o_exception <= '0';
       if kill_req = '1' then             -- outputs a NOP
@@ -333,7 +338,6 @@ begin  -- architecture rtl
                                          -- memory transaction).
           o_exception <= '1';
         end if;
-        o_instr_tag <= INSTR_TAG_NONE;
       elsif stall_req = '0' then
         o_reg1.idx <= r2_reg1.idx;
 
@@ -367,35 +371,47 @@ begin  -- architecture rtl
         o_reg2        <= r2_reg2;
         o_jump_target <= r2_jump_target;
         o_is_jump     <= r2_is_jump;
-
-        o_instr_tag <= r2_instr_tag;
-        o_mid_instr_tag <= r1_instr_tag;
       end if;
     end if;
   end process;
 
+  instr_tags : process(clk, rst, kill_req, stall_req)
+  begin
+    if rst = '1' then
+      o_m0_instr_tag <= INSTR_TAG_NONE;
+      o_m1_instr_tag <= INSTR_TAG_NONE;
+      o_m2_instr_tag <= INSTR_TAG_NONE;
+    elsif rising_edge(clk) then
+      if kill_req = '1' then
+      o_m0_instr_tag <= INSTR_TAG_NONE;
+      o_m1_instr_tag <= INSTR_TAG_NONE;
+      o_m2_instr_tag <= INSTR_TAG_NONE;
+      elsif stall_req = '1' or s_need_stall = '1' then
+      else
+        o_m2_instr_tag <= r2_instr_tag;
+      end if;
+    end if;
+    o_m0_instr_tag <= r1_instr_tag;
+    o_m1_instr_tag <= r2_instr_tag;
+  end process instr_tags;
+
   debug : process (clk, rst) is
   begin  -- process debug
     if rst = '1' then                   -- asynchronous reset (active low)
-      r1_dbg_mem_pc <= (others => '0');
-      r2_dbg_mem_pc <= (others => '0');
+      o_dbg_mem0_pc <= (others => 'X');
       o_dbg_mem1_pc <= (others => 'X');
       o_dbg_mem2_pc <= (others => 'X');
-      o_dbg_mem3_pc <= (others => 'X');
     elsif rising_edge(clk) then         -- rising clock edge
       if kill_req = '1' then
-        r1_dbg_mem_pc <= (others => 'X');
-        r2_dbg_mem_pc <= (others => 'X');
+        o_dbg_mem0_pc <= (others => 'X');
         o_dbg_mem1_pc <= (others => 'X');
         o_dbg_mem2_pc <= (others => 'X');
-        o_dbg_mem3_pc <= (others => 'X');
-      elsif stall_req = '0' then
-        r1_dbg_mem_pc <= i_dbg_mem_pc;
-        r2_dbg_mem_pc <= r1_dbg_mem_pc;
-        o_dbg_mem1_pc <= i_dbg_mem_pc;
-        o_dbg_mem2_pc <= r1_dbg_mem_pc;
-        o_dbg_mem3_pc <= r2_dbg_mem_pc;
+      elsif stall_req = '1' or s_need_stall = '1' then
+      else
+        o_dbg_mem2_pc <= r2_dbg_mem_pc;
       end if;
     end if;
+    o_dbg_mem0_pc <= r1_dbg_mem_pc;
+    o_dbg_mem1_pc <= r2_dbg_mem_pc;
   end process debug;
 end architecture rtl;

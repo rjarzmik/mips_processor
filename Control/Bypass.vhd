@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-12-12
--- Last update: 2016-12-17
+-- Last update: 2017-01-04
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -40,6 +40,10 @@ entity Bypass is
     --- Bypass sources
     signal i_ex2mem_reg1  : in  register_port_type;
     signal i_ex2mem_reg2  : in  register_port_type;
+    signal i_mem2m1_reg1  : in  register_port_type;
+    signal i_mem2m1_reg2  : in  register_port_type;
+    signal i_m12m2_reg1   : in  register_port_type;
+    signal i_m12m2_reg2   : in  register_port_type;
     signal i_mem2wb_reg1  : in  register_port_type;
     signal i_mem2wb_reg2  : in  register_port_type;
     signal i_wb2di_reg1   : in  register_port_type;
@@ -66,6 +70,10 @@ begin  -- architecture rtl
 
   o_reg1 <= i_ex2mem_reg1 when i_ex2mem_reg1.we = '1' and i_ex2mem_reg1.idx = i_src_reg1_idx else
             i_ex2mem_reg2 when i_ex2mem_reg2.we = '1' and i_ex2mem_reg2.idx = i_src_reg1_idx else
+            i_mem2m1_reg1 when i_mem2m1_reg1.we = '1' and i_mem2m1_reg1.idx = i_src_reg1_idx else
+            i_mem2m1_reg2 when i_mem2m1_reg2.we = '1' and i_mem2m1_reg2.idx = i_src_reg1_idx else
+            i_m12m2_reg1  when i_m12m2_reg1.we = '1'  and i_m12m2_reg1.idx = i_src_reg1_idx else
+            i_m12m2_reg2  when i_m12m2_reg2.we = '1'  and i_m12m2_reg2.idx = i_src_reg1_idx else
             i_mem2wb_reg1 when i_mem2wb_reg1.we = '1' and i_mem2wb_reg1.idx = i_src_reg1_idx else
             i_mem2wb_reg2 when i_mem2wb_reg2.we = '1' and i_mem2wb_reg2.idx = i_src_reg1_idx else
             i_wb2di_reg1  when i_wb2di_reg1.we = '1' and i_wb2di_reg1.idx = i_src_reg1_idx else
@@ -74,6 +82,10 @@ begin  -- architecture rtl
 
   o_reg2 <= i_ex2mem_reg1 when i_ex2mem_reg1.we = '1' and i_ex2mem_reg1.idx = i_src_reg2_idx else
             i_ex2mem_reg2 when i_ex2mem_reg2.we = '1' and i_ex2mem_reg2.idx = i_src_reg2_idx else
+            i_mem2m1_reg1 when i_mem2m1_reg1.we = '1' and i_mem2m1_reg1.idx = i_src_reg2_idx else
+            i_mem2m1_reg2 when i_mem2m1_reg2.we = '1' and i_mem2m1_reg2.idx = i_src_reg2_idx else
+            i_m12m2_reg1  when i_m12m2_reg1.we = '1'  and i_m12m2_reg1.idx = i_src_reg2_idx else
+            i_m12m2_reg2  when i_m12m2_reg2.we = '1'  and i_m12m2_reg2.idx = i_src_reg2_idx else
             i_mem2wb_reg1 when i_mem2wb_reg1.we = '1' and i_mem2wb_reg1.idx = i_src_reg2_idx else
             i_mem2wb_reg2 when i_mem2wb_reg2.we = '1' and i_mem2wb_reg2.idx = i_src_reg2_idx else
             i_wb2di_reg1  when i_wb2di_reg1.we = '1' and i_wb2di_reg1.idx = i_src_reg2_idx else

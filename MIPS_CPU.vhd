@@ -57,9 +57,9 @@ entity MIPS_CPU is
     signal o_dbg_if_pc              : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
     signal o_dbg_di_pc              : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
     signal o_dbg_ex_pc              : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
-    signal o_dbg_mem_pc             : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
-    signal o_dbg_mem1_pc            : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
-    signal o_dbg_mem2_pc            : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
+    signal o_dbg_mem_m0_pc          : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
+    signal o_dbg_mem_m1_pc          : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
+    signal o_dbg_mem_m2_pc          : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
     signal o_dbg_wb_pc              : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
     signal o_dbg_commited_pc        : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
     signal o_dbg_pc_killed          : out std_logic;
@@ -82,8 +82,9 @@ entity MIPS_CPU is
     signal o_dbg_if_instr_tag       : out instr_tag_t;
     signal o_dbg_di_instr_tag       : out instr_tag_t;
     signal o_dbg_ex_instr_tag       : out instr_tag_t;
-    signal o_dbg_mem_mid_instr_tag  : out instr_tag_t;
-    signal o_dbg_mem_instr_tag      : out instr_tag_t;
+    signal o_dbg_mem_m0_instr_tag   : out instr_tag_t;
+    signal o_dbg_mem_m1_instr_tag   : out instr_tag_t;
+    signal o_dbg_mem_m2_instr_tag   : out instr_tag_t;
     signal o_dbg_wb_instr_tag       : out instr_tag_t;
     signal o_dbg_if_prediction      : out prediction_t
     );
@@ -133,7 +134,9 @@ architecture rtl of MIPS_CPU is
   signal ex2mem_mem_data    : std_logic_vector(DATA_WIDTH - 1 downto 0);
   signal ex2mem_mem_op      : memory_op_type;
   signal mem_instr_tag      : instr_tag_t;
-  signal mem_mid_instr_tag  : instr_tag_t;
+  signal mem_m0_instr_tag   : instr_tag_t;
+  signal mem_m1_instr_tag   : instr_tag_t;
+  signal mem_m2_instr_tag   : instr_tag_t;
 
   signal mem2ctrl_stage1_reg1 : register_port_type;
   signal mem2ctrl_stage1_reg2 : register_port_type;
@@ -180,9 +183,9 @@ architecture rtl of MIPS_CPU is
   signal dbg_if_pc         : std_logic_vector(ADDR_WIDTH - 1 downto 0);
   signal dbg_di_pc         : std_logic_vector(ADDR_WIDTH - 1 downto 0);
   signal dbg_ex_pc         : std_logic_vector(ADDR_WIDTH - 1 downto 0);
-  signal dbg_mem_pc        : std_logic_vector(ADDR_WIDTH - 1 downto 0);
-  signal dbg_mem1_pc       : std_logic_vector(ADDR_WIDTH - 1 downto 0);
-  signal dbg_mem2_pc       : std_logic_vector(ADDR_WIDTH - 1 downto 0);
+  signal dbg_mem_m0_pc     : std_logic_vector(ADDR_WIDTH - 1 downto 0);
+  signal dbg_mem_m1_pc     : std_logic_vector(ADDR_WIDTH - 1 downto 0);
+  signal dbg_mem_m2_pc     : std_logic_vector(ADDR_WIDTH - 1 downto 0);
   signal dbg_wb_pc         : std_logic_vector(ADDR_WIDTH - 1 downto 0);
   signal dbg_commited_pc   : std_logic_vector(ADDR_WIDTH - 1 downto 0);
   signal dbg_if_prediction : prediction_t;
@@ -274,9 +277,9 @@ begin  -- architecture rtl
       o_is_jump     => ex2mem_is_jump,
       o_mem_data    => ex2mem_mem_data,
       o_mem_op      => ex2mem_mem_op,
-      o_instr_tag   => mem_instr_tag,
+      o_instr_tag   => mem_m0_instr_tag,
       i_dbg_ex_pc   => dbg_ex_pc,
-      o_dbg_ex_pc   => dbg_mem_pc);
+      o_dbg_ex_pc   => dbg_mem_m0_pc);
 
   mem_stage : entity work.Memory_access
     generic map (
@@ -295,7 +298,7 @@ begin  -- architecture rtl
       i_mem_data    => ex2mem_mem_data,
       i_is_jump     => ex2mem_is_jump,
       i_jump_target => ex2mem_jump_target,
-      i_instr_tag   => mem_instr_tag,
+      i_instr_tag   => mem_m0_instr_tag,
 
       o_reg1        => mem2wb_reg1,
       o_reg2        => mem2wb_reg2,
@@ -306,8 +309,9 @@ begin  -- architecture rtl
       o_stage1_reg2   => mem2ctrl_stage1_reg2,
       o_stage2_reg1   => mem2ctrl_stage2_reg1,
       o_stage2_reg2   => mem2ctrl_stage2_reg2,
-      o_mid_instr_tag => mem_mid_instr_tag,
-      o_instr_tag     => wb_instr_tag,
+      o_m0_instr_tag  => mem_m1_instr_tag,
+      o_m1_instr_tag  => mem_m2_instr_tag,
+      o_m2_instr_tag  => wb_instr_tag,
 
       -- Memory interface
       i_mem_rd_valid   => i_mem_rd_valid,
@@ -321,10 +325,10 @@ begin  -- architecture rtl
       o_need_stall  => mem2upstream_stall_req,
 
       -- debug signals
-      i_dbg_mem_pc  => dbg_mem_pc,
-      o_dbg_mem1_pc => dbg_mem1_pc,
-      o_dbg_mem2_pc => dbg_mem2_pc,
-      o_dbg_mem3_pc => dbg_wb_pc);
+      i_dbg_mem_pc  => dbg_mem_m0_pc,
+      o_dbg_mem0_pc => dbg_mem_m1_pc,
+      o_dbg_mem1_pc => dbg_mem_m2_pc,
+      o_dbg_mem2_pc => dbg_wb_pc);
 
   wb : entity work.Writeback
     generic map (
@@ -382,6 +386,10 @@ begin  -- architecture rtl
       rst            => rst,
       i_ex2mem_reg1  => ex2mem_reg1,
       i_ex2mem_reg2  => ex2mem_reg2,
+      i_mem2m1_reg1  => mem2ctrl_stage1_reg1,
+      i_mem2m1_reg2  => mem2ctrl_stage1_reg2,
+      i_m12m2_reg1   => mem2ctrl_stage2_reg1,
+      i_m12m2_reg2   => mem2ctrl_stage2_reg2,
       i_mem2wb_reg1  => mem2wb_reg1,
       i_mem2wb_reg2  => mem2wb_reg2,
       i_wb2di_reg1   => wb2di_reg1,
@@ -406,10 +414,12 @@ begin  -- architecture rtl
   wb_killed  <= mispredict_kills_pipeline;
 
   -- Debug signal
-  o_dbg_if_pc  <= dbg_if_pc;
-  o_dbg_di_pc  <= dbg_di_pc;
-  o_dbg_ex_pc  <= dbg_ex_pc;
-  o_dbg_mem_pc <= dbg_mem_pc;
+  o_dbg_if_pc     <= dbg_if_pc;
+  o_dbg_di_pc     <= dbg_di_pc;
+  o_dbg_ex_pc     <= dbg_ex_pc;
+  o_dbg_mem_m0_pc <= dbg_mem_m0_pc;
+  o_dbg_mem_m1_pc <= dbg_mem_m1_pc;
+  o_dbg_mem_m2_pc <= dbg_mem_m2_pc;
   o_dbg_wb_pc  <= dbg_wb_pc;
 
   o_dbg_commited_pc <= dbg_commited_pc;
@@ -435,8 +445,9 @@ begin  -- architecture rtl
   o_dbg_if_instr_tag      <= if_instr_tag;
   o_dbg_di_instr_tag      <= di_instr_tag;
   o_dbg_ex_instr_tag      <= ex_instr_tag;
-  o_dbg_mem_mid_instr_tag <= mem_mid_instr_tag;
-  o_dbg_mem_instr_tag     <= mem_instr_tag;
+  o_dbg_mem_m0_instr_tag  <= mem_m0_instr_tag;
+  o_dbg_mem_m1_instr_tag  <= mem_m1_instr_tag;
+  o_dbg_mem_m2_instr_tag  <= mem_m2_instr_tag;
   o_dbg_wb_instr_tag      <= wb_instr_tag;
 
   o_dbg_if_prediction <= dbg_if_prediction;

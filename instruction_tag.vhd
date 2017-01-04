@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-12-07
--- Last update: 2016-12-07
+-- Last update: 2017-01-04
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -26,7 +26,7 @@ use ieee.std_logic_1164.all;
 
 package instruction_defs is
   -- Smallest 2 power with at least : None, Fetch, Decode/Issue, Execute, Memory, Writeback
-  constant NB_PIPELINE_STAGES : natural := 8;
+  constant NB_PIPELINE_STAGES : natural := 16;
 
   type instr_tag_t is record
     valid           : boolean;

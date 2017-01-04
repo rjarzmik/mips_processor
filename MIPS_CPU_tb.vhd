@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-12
--- Last update: 2017-01-03
+-- Last update: 2017-01-04
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -74,9 +74,9 @@ architecture rtl of MIPS_CPU_tb is
   signal dbg_if_pc       : std_logic_vector(ADDR_WIDTH - 1 downto 0);
   signal dbg_di_pc       : std_logic_vector(ADDR_WIDTH - 1 downto 0);
   signal dbg_ex_pc       : std_logic_vector(ADDR_WIDTH - 1 downto 0);
-  signal dbg_mem_pc      : std_logic_vector(ADDR_WIDTH - 1 downto 0);
-  signal dbg_mem1_pc     : std_logic_vector(ADDR_WIDTH - 1 downto 0);
-  signal dbg_mem2_pc     : std_logic_vector(ADDR_WIDTH - 1 downto 0);
+  signal dbg_mem_m0_pc   : std_logic_vector(ADDR_WIDTH - 1 downto 0);
+  signal dbg_mem_m1_pc   : std_logic_vector(ADDR_WIDTH - 1 downto 0);
+  signal dbg_mem_m2_pc   : std_logic_vector(ADDR_WIDTH - 1 downto 0);
   signal dbg_wb_pc       : std_logic_vector(ADDR_WIDTH - 1 downto 0);
   signal dbg_commited_pc : std_logic_vector(ADDR_WIDTH - 1 downto 0);
 
@@ -102,8 +102,9 @@ architecture rtl of MIPS_CPU_tb is
   signal dbg_if_itag       : instr_tag_t;
   signal dbg_di_itag       : instr_tag_t;
   signal dbg_ex_itag       : instr_tag_t;
-  signal dbg_mem_mid_itag  : instr_tag_t;
-  signal dbg_mem_itag      : instr_tag_t;
+  signal dbg_mem_m0_itag  : instr_tag_t;
+  signal dbg_mem_m1_itag  : instr_tag_t;
+  signal dbg_mem_m2_itag  : instr_tag_t;
   signal dbg_wb_itag       : instr_tag_t;
   signal dbg_commited_itag : instr_tag_t;
   signal dbg_if_prediction : prediction_t;
@@ -112,18 +113,22 @@ architecture rtl of MIPS_CPU_tb is
     rst  : std_logic; kill : std_logic; stall : std_logic;
     itag : instr_tag_t)
     return string is
-    variable o : string(1 to 1);
+    variable o : string(1 to 2);
   begin
     if rst = '1' then
-      o := "R";
+      o := " R";
     elsif kill = '1' then
-      o := "K";
+      o := " K";
     elsif stall = '1' then
-      o := "S";
+      o := " S";
     elsif not itag.valid then
-      o := "-";
+      o := " -";
     else
-      o := integer'image(itag.tag);
+      if itag.tag < 10 then
+        o := ' ' & integer'image(itag.tag);
+      else
+        o := integer'image(itag.tag);
+      end if;
     end if;
     return o;
   end function dbg_get_stage_letter;
@@ -133,16 +138,21 @@ architecture rtl of MIPS_CPU_tb is
     rst   : std_logic; kill : std_logic; stall : std_logic;
     pc    : std_logic_vector(ADDR_WIDTH - 1 downto 0);
     itag  : instr_tag_t) return string is
-    constant length : integer := stage'length + 4;
+    constant length : integer := stage'length + 5;
     variable head   : string(1 to length);
   begin
     head(1 to stage'length) := stage;
     head(stage'length + 1)  := '(';
-    head(stage'length + 2 to stage'length + 2) :=
+    head(stage'length + 2 to stage'length + 3) :=
       dbg_get_stage_letter(rst, kill, stall, itag);
-    head(stage'length + 3 to stage'length + 4) := ")@";
 
-    return head & to_hstring(pc);
+    if stage /= "di" then
+      head(stage'length + 4 to stage'length + 4) := ")";
+      return head(1 to length - 1);
+    else
+      head(stage'length + 4 to stage'length + 5) := ")@";
+      return head & to_hstring(pc);
+    end if;
   end function dbg_get_stage_string;
 
   function dbg_get_done_string(
@@ -303,7 +313,9 @@ begin  -- architecture rtl
       o_dbg_if_pc              => dbg_if_pc,
       o_dbg_di_pc              => dbg_di_pc,
       o_dbg_ex_pc              => dbg_ex_pc,
-      o_dbg_mem_pc             => dbg_mem_pc,
+      o_dbg_mem_m0_pc          => dbg_mem_m0_pc,
+      o_dbg_mem_m1_pc          => dbg_mem_m1_pc,
+      o_dbg_mem_m2_pc          => dbg_mem_m2_pc,
       o_dbg_wb_pc              => dbg_wb_pc,
       o_dbg_commited_pc        => dbg_commited_pc,
       o_dbg_pc_killed          => dbg_pc_killed,
@@ -326,8 +338,9 @@ begin  -- architecture rtl
       o_dbg_if_instr_tag       => dbg_if_itag,
       o_dbg_di_instr_tag       => dbg_di_itag,
       o_dbg_ex_instr_tag       => dbg_ex_itag,
-      o_dbg_mem_mid_instr_tag  => dbg_mem_mid_itag,
-      o_dbg_mem_instr_tag      => dbg_mem_itag,
+      o_dbg_mem_m0_instr_tag   => dbg_mem_m0_itag,
+      o_dbg_mem_m1_instr_tag   => dbg_mem_m1_itag,
+      o_dbg_mem_m2_instr_tag   => dbg_mem_m2_itag,
       o_dbg_wb_instr_tag       => dbg_wb_itag,
       o_dbg_if_prediction      => dbg_if_prediction
       );
@@ -406,8 +419,9 @@ begin  -- architecture rtl
           dbg_get_stage_string("if", rst, fkill, dbg_ife_stalled, dbg_if_pc, dbg_if_itag) & " " &
           dbg_get_stage_string("di", rst, dbg_di_killed, dbg_di_stalled, dbg_di_pc, dbg_di_itag) & " " &
           dbg_get_stage_string("ex", rst, dbg_ex_killed, dbg_ex_stalled, dbg_ex_pc, dbg_ex_itag) & " " &
-          dbg_get_stage_string("mem1", rst, dbg_mem_killed, dbg_mem_stalled, dbg_mem1_pc, dbg_mem_itag) & " " &
-          dbg_get_stage_string("mem2", rst, dbg_mem_killed, dbg_mem_stalled, dbg_mem2_pc, dbg_mem_mid_itag) & " " &
+          dbg_get_stage_string("m0", rst, dbg_mem_killed, dbg_mem_stalled, dbg_mem_m0_pc, dbg_mem_m0_itag) & " " &
+          dbg_get_stage_string("m1", rst, dbg_mem_killed, dbg_mem_stalled, dbg_mem_m1_pc, dbg_mem_m1_itag) & " " &
+          dbg_get_stage_string("m2", rst, dbg_mem_killed, dbg_mem_stalled, dbg_mem_m2_pc, dbg_mem_m2_itag) & " " &
           dbg_get_stage_string("wb", rst, dbg_wb_killed, dbg_wb_stalled, dbg_wb_pc, dbg_wb_itag) & " " &
           dbg_get_done_string("done", rst, dbg_commited_itag, dbg_commited_pc) & " " &
           dbg_get_regwrite_string(dbg_wb2di_reg1) &
