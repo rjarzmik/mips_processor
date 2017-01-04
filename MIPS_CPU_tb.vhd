@@ -44,7 +44,7 @@ architecture rtl of MIPS_CPU_tb is
   constant DATA_WIDTH           : integer := 32;
   constant NB_REGISTERS_GP      : integer := 32;
   constant NB_REGISTERS_SPECIAL : integer := 2;
-  constant DEBUG                : boolean := true;
+  constant DEBUG                : boolean := false;
 
   -- clock
   signal Clk  : std_logic := '1';
@@ -80,7 +80,6 @@ architecture rtl of MIPS_CPU_tb is
   signal dbg_wb_pc       : std_logic_vector(ADDR_WIDTH - 1 downto 0);
   signal dbg_commited_pc : std_logic_vector(ADDR_WIDTH - 1 downto 0);
 
-  signal dbg_pc_killed   : std_logic;
   signal dbg_ife_killed  : std_logic;
   signal dbg_di_killed   : std_logic;
   signal dbg_ex_killed   : std_logic;
@@ -318,7 +317,6 @@ begin  -- architecture rtl
       o_dbg_mem_m2_pc          => dbg_mem_m2_pc,
       o_dbg_wb_pc              => dbg_wb_pc,
       o_dbg_commited_pc        => dbg_commited_pc,
-      o_dbg_pc_killed          => dbg_pc_killed,
       o_dbg_ife_killed         => dbg_ife_killed,
       o_dbg_di_killed          => dbg_di_killed,
       o_dbg_ex_killed          => dbg_ex_killed,

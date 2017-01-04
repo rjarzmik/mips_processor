@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik (Intel)  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-12-21
--- Last update: 2017-01-01
+-- Last update: 2017-01-04
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -278,7 +278,7 @@ begin  -- architecture str
 
   flusher : process(rst, clk, i_req, i_memory_done, mf2_allclear, mf2_bclr, flush_base_addr,
                     flush_memory_req, mf2_fbitset, flush_data_idx, state,
-                    flush_cache_line)
+                    flush_cache_line, flush_done)
     variable waiting_memory_rsp : std_logic  := '0';
     variable ffirst_flush       : std_ulogic := '1';
     variable all_clear_r        : std_logic;

@@ -375,7 +375,8 @@ begin  -- architecture rtl
     end if;
   end process;
 
-  instr_tags : process(clk, rst, kill_req, stall_req)
+  instr_tags : process(clk, rst, kill_req, stall_req, r1_instr_tag,
+                       r2_instr_tag)
   begin
     if rst = '1' then
       o_m0_instr_tag <= INSTR_TAG_NONE;
@@ -395,7 +396,7 @@ begin  -- architecture rtl
     o_m1_instr_tag <= r2_instr_tag;
   end process instr_tags;
 
-  debug : process (clk, rst) is
+  debug : process (clk, rst, r1_dbg_mem_pc, r2_dbg_mem_pc) is
   begin  -- process debug
     if rst = '1' then                   -- asynchronous reset (active low)
       o_dbg_mem0_pc <= (others => 'X');

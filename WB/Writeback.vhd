@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-16
--- Last update: 2016-12-09
+-- Last update: 2017-01-04
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -69,7 +69,6 @@ architecture rtl of Writeback is
   signal reg1             : register_port_type;
   signal reg2             : register_port_type;
   signal is_nop           : boolean;
-  signal is_jump          : std_logic;
   signal last_is_jump     : std_logic;
   signal last_jump_target : std_logic_vector(ADDR_WIDTH - 1 downto 0);
   signal last_instr_tag   : instr_tag_t;
@@ -89,7 +88,6 @@ begin  -- architecture rtl
     if rst = '1' then
       reg1.we          <= '0';
       reg2.we          <= '0';
-      is_jump          <= '0';
       o_instr_tag      <= INSTR_TAG_NONE;
       last_instr_tag   <= INSTR_TAG_NONE;
       last_is_jump     <= '0';
@@ -98,7 +96,6 @@ begin  -- architecture rtl
       if kill_req = '1' then
         reg1.we       <= '0';
         reg2.we       <= '0';
-        is_jump       <= '0';
         o_is_jump     <= '0';
         o_jump_target <= (others => 'X');
         o_instr_tag   <= INSTR_TAG_NONE;
@@ -174,8 +171,6 @@ begin  -- architecture rtl
 
   o_reg1 <= reg1;
   o_reg2 <= reg2;
--- o_is_jump     <= is_jump;
--- o_jump_target <= jump_target when is_jump = '1' else (others => 'X');
 
 end architecture rtl;
 

@@ -62,7 +62,6 @@ entity MIPS_CPU is
     signal o_dbg_mem_m2_pc          : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
     signal o_dbg_wb_pc              : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
     signal o_dbg_commited_pc        : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
-    signal o_dbg_pc_killed          : out std_logic;
     signal o_dbg_ife_killed         : out std_logic;
     signal o_dbg_di_killed          : out std_logic;
     signal o_dbg_ex_killed          : out std_logic;
@@ -103,7 +102,6 @@ architecture rtl of MIPS_CPU is
   signal jump_target         : std_logic_vector(ADDR_WIDTH - 1 downto 0);
   signal fetched_instruction : std_logic_vector(DATA_WIDTH - 1 downto 0);
   signal fetched_pc          : std_logic_vector(DATA_WIDTH - 1 downto 0);
-  signal fetch_stalls_pc     : std_logic;
   signal if_instr_tag        : instr_tag_t;
   signal di_instr_tag        : instr_tag_t;
   signal alu_op              : alu_op_type;
@@ -172,7 +170,6 @@ architecture rtl of MIPS_CPU is
   signal wb_stalled                : std_logic;
   --- Pipeline stage output killers (ie. "nop" replacement of stage output)
   signal mispredict_kills_pipeline : std_logic;
-  signal pc_killed                 : std_logic;
   signal ife_killed                : std_logic;
   signal di_killed                 : std_logic;
   signal ex_killed                 : std_logic;
@@ -400,7 +397,7 @@ begin  -- architecture rtl
       o_reg2         => bp2di_reg2);
 
   -- Control signals
-  pc_stalled  <= fetch_stalls_pc or mem2upstream_stall_req;
+  pc_stalled  <= mem2upstream_stall_req;
   ife_stalled <= '1' when (RaW_detected = '1' and bp2di_reg1.we = '0' and bp2di_reg2.we = '0') or mem2upstream_stall_req = '1' else '0';
   di_stalled  <= mem2upstream_stall_req;
   ex_stalled  <= mem2upstream_stall_req;
@@ -423,7 +420,6 @@ begin  -- architecture rtl
   o_dbg_wb_pc  <= dbg_wb_pc;
 
   o_dbg_commited_pc <= dbg_commited_pc;
-  o_dbg_pc_killed   <= pc_killed;
   o_dbg_ife_killed  <= ife_killed;
   o_dbg_di_killed   <= di_killed;
   o_dbg_ex_killed   <= ex_killed;
@@ -433,6 +429,7 @@ begin  -- architecture rtl
   o_dbg_ife_stalled <= ife_stalled;
   o_dbg_di_stalled  <= di_stalled;
   o_dbg_ex_stalled  <= ex_stalled;
+  o_dbg_mem_stalled <= mem_stalled;
   o_dbg_wb_stalled  <= wb_stalled;
 
   o_dbg_jump_pc            <= wb_is_jump;
