@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-12
--- Last update: 2017-01-04
+-- Last update: 2017-01-05
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -432,7 +432,7 @@ begin  -- architecture rtl
           end if;
         end if;
 
-        if passed_by_addr0 > 4 then
+        if passed_by_addr0 > 1 then
           report "PC rolled over to 0, ending simulation." severity error;
           stop <= '1';
         end if;
@@ -447,7 +447,7 @@ begin  -- architecture rtl
   -- type   : sequential
   -- inputs : clk, rst
   -- outputs:
-  mem : process (clk, rst) is
+  mem : process (clk, rst, stop) is
   begin  -- process mem
     if rst = '1' then                   -- asynchronous reset (active low)
       i_mem_rd_valid <= '0';
