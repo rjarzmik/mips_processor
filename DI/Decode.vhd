@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-12
--- Last update: 2017-01-04
+-- Last update: 2017-01-05
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -130,27 +130,6 @@ architecture rtl of Decode is
 
   signal alu_op : alu_op_type;
 
-  component RegisterFile is
-    generic (
-      DATA_WIDTH           : positive;
-      NB_REGISTERS         : positive;
-      NB_REGISTERS_SPECIAL : positive);
-    port (
-      clk           : in  std_logic;
-      rst           : in  std_logic;
-      stall_req     : in  std_logic;
-      a_idx         : in  natural range 0 to NB_REGISTERS + NB_REGISTERS_SPECIAL - 1;
-      b_idx         : in  natural range 0 to NB_REGISTERS + NB_REGISTERS_SPECIAL - 1;
-      rwb_reg1_we   : in  std_logic;
-      rwb_reg1_idx  : in  natural range 0 to NB_REGISTERS + NB_REGISTERS_SPECIAL - 1;
-      rwb_reg1_data : in  std_logic_vector(DATA_WIDTH - 1 downto 0);
-      rwb_reg2_we   : in  std_logic;
-      rwb_reg2_idx  : in  natural range 0 to NB_REGISTERS + NB_REGISTERS_SPECIAL - 1;
-      rwb_reg2_data : in  std_logic_vector(DATA_WIDTH - 1 downto 0);
-      a             : out std_logic_vector(DATA_WIDTH - 1 downto 0);
-      b             : out std_logic_vector(DATA_WIDTH - 1 downto 0));
-  end component RegisterFile;
-
   -----------------------------------------------------------------------------
   -- Internal signal declarations
   -----------------------------------------------------------------------------
@@ -165,9 +144,6 @@ architecture rtl of Decode is
   signal next_pc      : std_logic_vector(ADDR_WIDTH - 1 downto 0);
   signal pc_displace  : std_logic_vector(25 downto 0);
   signal decode_error : std_logic;
-  -- Enable writeback of register file if not stalled
-  signal rwb_reg1_we  : std_logic;
-  signal rwb_reg2_we  : std_logic;
 
   type reg_src is (bypassed_regfile, zero, immediate_unsigned, immediate_signextend);
   signal ra_src                : reg_src;
@@ -186,31 +162,30 @@ architecture rtl of Decode is
   signal jt_mux_addr        : addr_t;
   signal jt_mux_reg         : addr_t;
 
+  signal rwb_reg_wdata : std_logic_vector(DATA_WIDTH * 2 - 1 downto 0);
 begin  -- architecture rtl
 
   -----------------------------------------------------------------------------
   -- Component instantiations
   -----------------------------------------------------------------------------
 
-  rfile : RegisterFile
+  rwb_reg_wdata <= i_rwb_reg2.data & i_rwb_reg1.data;
+  rfile : entity work.RegisterFile
     generic map (
       DATA_WIDTH           => DATA_WIDTH,
-      NB_REGISTERS         => NB_REGISTERS - NB_REGISTERS_SPECIAL,
-      NB_REGISTERS_SPECIAL => NB_REGISTERS_SPECIAL)
+      NB_GP_REGISTERS      => NB_REGISTERS - NB_REGISTERS_SPECIAL,
+      NB_GPDW_REGISTERS    => NB_REGISTERS_SPECIAL)
     port map (
       clk           => clk,
       rst           => rst,
       stall_req     => stall_req,
       a_idx         => rsi,
       b_idx         => rti,
-      a             => rfile_rs,
-      b             => rfile_rt,
-      rwb_reg1_we   => rwb_reg1_we,
-      rwb_reg1_idx  => i_rwb_reg1.idx,
-      rwb_reg1_data => i_rwb_reg1.data,
-      rwb_reg2_we   => rwb_reg2_we,
-      rwb_reg2_idx  => i_rwb_reg2.idx,
-      rwb_reg2_data => i_rwb_reg2.data
+      q_a           => rfile_rs,
+      q_b           => rfile_rt,
+      rwb_reg_we    => i_rwb_reg1.we,
+      rwb_reg_idx   => i_rwb_reg1.idx,
+      rwb_reg_wdata => rwb_reg_wdata
       );
 
   next_pc <= std_logic_vector(unsigned(i_pc) + 4);
@@ -367,9 +342,6 @@ begin  -- architecture rtl
       end if;
     end if;
   end process registers;
-
-  rwb_reg1_we <= i_rwb_reg1.we;
-  rwb_reg2_we <= i_rwb_reg2.we;
 
   rtargets : process(rst, clk, kill_req, stall_req, op_code, func, rsi, rti, rdi)
     variable reg1_we  : std_ulogic;
