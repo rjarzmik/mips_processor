@@ -362,7 +362,7 @@ begin  -- architecture rtl
             reg1_idx := REG_IDX_MFLO;
             reg2_we  := '1';
             reg2_idx := REG_IDX_MFHI;
-          when func_nop =>
+          when func_nop | func_jr =>
           when others =>
             reg1_we  := '1';
             reg1_idx := rdi;
