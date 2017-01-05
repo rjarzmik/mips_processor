@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-11
--- Last update: 2017-01-04
+-- Last update: 2017-01-05
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -382,15 +382,10 @@ begin  -- architecture rtl
       clk            => clk,
       rst            => rst,
       i_ex2mem_reg1  => ex2mem_reg1,
-      i_ex2mem_reg2  => ex2mem_reg2,
       i_mem2m1_reg1  => mem2ctrl_stage1_reg1,
-      i_mem2m1_reg2  => mem2ctrl_stage1_reg2,
       i_m12m2_reg1   => mem2ctrl_stage2_reg1,
-      i_m12m2_reg2   => mem2ctrl_stage2_reg2,
       i_mem2wb_reg1  => mem2wb_reg1,
-      i_mem2wb_reg2  => mem2wb_reg2,
       i_wb2di_reg1   => wb2di_reg1,
-      i_wb2di_reg2   => wb2di_reg2,
       i_src_reg1_idx => di2ctrl_reg1_idx,
       i_src_reg2_idx => di2ctrl_reg2_idx,
       o_reg1         => bp2di_reg1,
