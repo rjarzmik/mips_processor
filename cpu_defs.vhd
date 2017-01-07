@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-15
--- Last update: 2016-12-07
+-- Last update: 2017-01-06
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -41,5 +41,7 @@ package cpu_defs is
     idx  : natural range 0 to NB_REGISTERS_MAX;
     data : std_logic_vector(REGISTER_WIDTH - 1 downto 0);
   end record register_port_type;
+  constant REG_IDLE : register_port_type :=
+    (we => '0', idx => 0, data => (others => 'X'));
 
 end package cpu_defs;

@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-16
--- Last update: 2017-01-04
+-- Last update: 2017-01-08
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -174,4 +174,92 @@ begin  -- architecture rtl
 
 end architecture rtl;
 
--------------------------------------------------------------------------------
+architecture str of Writeback is
+  subtype addr_t is std_logic_vector(ADDR_WIDTH - 1 downto 0);
+  subtype data_t is std_logic_vector(DATA_WIDTH - 1 downto 0);
+
+  type state_t is (normal, jump_recorded);
+
+begin
+  process(rst, clk, stall_req, kill_req, i_instr_tag)
+    variable state           : state_t := normal;
+    variable recorded_itag   : instr_tag_t;
+    variable recorded_target : addr_t;
+    variable is_nop          : boolean;
+    variable o_itag          : instr_tag_t;
+  begin
+    if rst = '1' then
+      o_is_jump     <= '0';
+      o_jump_target <= (others => 'X');
+      o_instr_tag   <= INSTR_TAG_NONE;
+      o_reg1        <= REG_IDLE;
+      o_reg2        <= REG_IDLE;
+      state         := normal;
+    else
+      is_nop := not i_instr_tag.valid;
+
+      if rising_edge(clk) then
+        o_itag := i_instr_tag;
+
+        if kill_req = '1' then
+          o_is_jump     <= '0';
+          o_jump_target <= i_jump_target;
+          o_itag.valid  := false;
+          o_reg1        <= REG_IDLE;
+          o_reg2        <= REG_IDLE;
+          state         := normal;
+        elsif stall_req = '1' then
+        else
+          o_reg1 <= i_reg1;
+          o_reg2 <= i_reg2;
+
+          case state is
+            when normal =>
+              if i_is_jump = '1' then
+                -- Record the jump and transition state
+                state           := jump_recorded;
+                recorded_target := i_jump_target;
+                recorded_itag   := i_instr_tag;
+                o_is_jump       <= '0';
+                o_itag.valid    := false;
+              else
+                -- Normal instruction
+                state         := normal;
+                o_is_jump     <= '0';
+                o_itag.valid  := i_instr_tag.valid;
+                recorded_itag := i_instr_tag;
+              end if;
+            when jump_recorded =>
+              if i_is_jump = '1' or not is_nop then
+                -- Delay slot instruction
+                state                  := normal;
+                o_is_jump              <= '1';
+                o_itag                 := recorded_itag;
+                o_itag.tag             := i_instr_tag.tag;
+                o_itag.is_branch_taken := true;
+              else
+                state        := jump_recorded;
+                o_is_jump    <= '0';
+                o_itag.valid := false;
+              end if;
+          end case;
+        end if;
+        o_instr_tag <= o_itag;
+      end if;
+      o_jump_target <= recorded_target;
+    end if;
+  end process;
+
+  debug : process(rst, clk, stall_req, kill_req)
+  begin
+    if rst = '1' then
+      o_dbg_wb_pc <= (others => 'X');
+    elsif rising_edge(clk) and kill_req = '1' then
+      o_dbg_wb_pc <= (others => 'X');
+    elsif rising_edge(clk) and stall_req = '1' then
+    elsif rising_edge(clk) then
+      o_dbg_wb_pc <= i_dbg_wb_pc;
+    end if;
+  end process debug;
+
+end architecture str;
