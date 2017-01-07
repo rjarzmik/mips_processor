@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-12
--- Last update: 2017-01-05
+-- Last update: 2017-01-07
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -456,6 +456,8 @@ begin  -- architecture rtl
         jump_op := greater;
       when op_bltz =>
         jump_op := lesser;
+      when op_jalr | op_j =>
+        jump_op := always;
       when others =>
         jump_op := none;
     end case;
