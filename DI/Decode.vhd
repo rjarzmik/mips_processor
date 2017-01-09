@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-12
--- Last update: 2017-01-07
+-- Last update: 2017-01-08
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -98,20 +98,24 @@ entity Decode is
   constant op_jalr : std_logic_vector(5 downto 0) := "000011";
 
   constant func_nop  : std_logic_vector(5 downto 0) := "000000";
+
   constant func_mul  : std_logic_vector(5 downto 0) := "011000";
   constant func_mulu : std_logic_vector(5 downto 0) := "011001";
   constant func_div  : std_logic_vector(5 downto 0) := "011010";
   constant func_divu : std_logic_vector(5 downto 0) := "011011";
+
   constant func_add  : std_logic_vector(5 downto 0) := "100000";
   constant func_addu : std_logic_vector(5 downto 0) := "100001";
   constant func_sub  : std_logic_vector(5 downto 0) := "100010";
   constant func_subu : std_logic_vector(5 downto 0) := "100011";
-  constant func_slt  : std_logic_vector(5 downto 0) := "101010";
-  constant func_sltu : std_logic_vector(5 downto 0) := "101011";
+
   constant func_and  : std_logic_vector(5 downto 0) := "100100";
   constant func_or   : std_logic_vector(5 downto 0) := "100101";
   constant func_nor  : std_logic_vector(5 downto 0) := "100111";
   constant func_xor  : std_logic_vector(5 downto 0) := "101000";
+  constant func_slt  : std_logic_vector(5 downto 0) := "101010";
+  constant func_sltu : std_logic_vector(5 downto 0) := "101011";
+
   constant func_jr   : std_logic_vector(5 downto 0) := "001000";
   constant func_jalr : std_logic_vector(5 downto 0) := "001001";
   constant func_mfhi : std_logic_vector(5 downto 0) := "010000";
