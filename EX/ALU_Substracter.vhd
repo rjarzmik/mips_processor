@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-12-06
--- Last update: 2016-12-06
+-- Last update: 2017-01-09
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -31,28 +31,29 @@ entity ALU_Substracter is
     );
 
   port (
-    i_ra : in  unsigned(DATA_WIDTH - 1 downto 0);
-    i_rb : in  unsigned(DATA_WIDTH - 1 downto 0);
-    o_q  : out unsigned(DATA_WIDTH * 2 - 1 downto 0)
+    clk    : in  std_logic;
+    clkena : in  std_logic;
+    i_ra   : in  unsigned(DATA_WIDTH - 1 downto 0);
+    i_rb   : in  unsigned(DATA_WIDTH - 1 downto 0);
+    o_q    : out unsigned(DATA_WIDTH * 2 - 1 downto 0)
     );
 end entity ALU_Substracter;
 
 -------------------------------------------------------------------------------
 
-architecture rtl of ALU_Substracter is
-  -----------------------------------------------------------------------------
-  -- Internal signal declarations
-  -----------------------------------------------------------------------------
+architecture str of ALU_Substracter is
   signal result      : unsigned(DATA_WIDTH downto 0);
   signal sign_extend : unsigned(DATA_WIDTH - 2 downto 0);
-
 begin  -- architecture rtl
 
-  o_q <= sign_extend & result;
+  sub : process(clk, clkena)
+  begin
+    if clkena = '1' and rising_edge(clk) then
+      o_q <= sign_extend & result;
+    end if;
+  end process sub;
 
   result      <= resize(i_ra, DATA_WIDTH + 1) - resize(i_rb, DATA_WIDTH + 1);
   sign_extend <= (others => result(DATA_WIDTH));
 
-end architecture rtl;
-
--------------------------------------------------------------------------------
+end architecture str;

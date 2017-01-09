@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-12-06
--- Last update: 2016-12-06
+-- Last update: 2017-01-09
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -23,34 +23,29 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
--------------------------------------------------------------------------------
-
 entity ALU_Log_Or is
   generic (
     DATA_WIDTH : integer
     );
 
   port (
-    i_ra : in  unsigned(DATA_WIDTH - 1 downto 0);
-    i_rb : in  unsigned(DATA_WIDTH - 1 downto 0);
-    o_q  : out unsigned(DATA_WIDTH * 2 - 1 downto 0)
+    clk    : in  std_logic;
+    clkena : in  std_logic;
+    i_ra   : in  unsigned(DATA_WIDTH - 1 downto 0);
+    i_rb   : in  unsigned(DATA_WIDTH - 1 downto 0);
+    o_q    : out unsigned(DATA_WIDTH * 2 - 1 downto 0)
     );
 end entity ALU_Log_Or;
 
--------------------------------------------------------------------------------
-
-architecture rtl of ALU_Log_Or is
-  -----------------------------------------------------------------------------
-  -- Internal signal declarations
-  -----------------------------------------------------------------------------
-  signal result  : unsigned(DATA_WIDTH - 1 downto 0);
+architecture str of ALU_Log_Or is
   constant upper : unsigned(DATA_WIDTH - 1 downto 0) := (others => '0');
-
 begin  -- architecture rtl
 
-  o_q    <= upper & result;
-  result <= i_ra or i_rb;
+  logor : process(clk, clkena)
+  begin
+    if clkena = '1' and rising_edge(clk) then
+      o_q <= upper & (i_ra or i_rb);
+    end if;
+  end process logor;
 
-end architecture rtl;
-
--------------------------------------------------------------------------------
+end architecture str;

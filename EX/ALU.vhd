@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik (Intel)  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-16
--- Last update: 2016-12-09
+-- Last update: 2017-01-09
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -25,8 +25,6 @@ use ieee.numeric_std.all;
 
 use work.cpu_defs.all;
 use work.instruction_defs.all;
-
--------------------------------------------------------------------------------
 
 entity ALU is
 
@@ -51,6 +49,7 @@ entity ALU is
     i_mem_data    : in  std_logic_vector(DATA_WIDTH - 1 downto 0);
     i_mem_op      : in  memory_op_type;
     i_instr_tag   : in  instr_tag_t;
+    o_ready       : out std_logic;
     o_reg1        : out register_port_type;
     o_reg2        : out register_port_type;
     o_jump_target : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
@@ -65,21 +64,15 @@ entity ALU is
 
 end entity ALU;
 
--------------------------------------------------------------------------------
-
 architecture rtl of ALU is
   signal ra : unsigned(DATA_WIDTH - 1 downto 0);
   signal rb : unsigned(DATA_WIDTH - 1 downto 0);
 
-  -----------------------------------------------------------------------------
-  -- Internal signal declarations
-  -----------------------------------------------------------------------------
+  signal nstall_req : std_logic;
   signal q          : unsigned(DATA_WIDTH * 2 - 1 downto 0) := (others => '0');
-  signal cond_zero  : std_logic;
-  signal cond_carry : std_logic;
   signal jump_op    : jump_type;
-  signal is_jump    : std_logic;
 
+  signal alu_op_q      : alu_op_type;
   signal adder_q       : unsigned(DATA_WIDTH * 2 - 1 downto 0);
   signal substracter_q : unsigned(DATA_WIDTH * 2 - 1 downto 0);
   signal multiplier_q  : unsigned(DATA_WIDTH * 2 - 1 downto 0);
@@ -90,32 +83,35 @@ architecture rtl of ALU is
   signal log_xor_q     : unsigned(DATA_WIDTH * 2 - 1 downto 0);
   signal slt_q         : unsigned(DATA_WIDTH * 2 - 1 downto 0);
 
-
 begin  -- architecture rtl
+  nstall_req <= not stall_req;
 
-  -----------------------------------------------------------------------------
-  -- Component instantiations
-  -----------------------------------------------------------------------------
   adder : entity work.ALU_Adder
     generic map (
       DATA_WIDTH => DATA_WIDTH)
     port map (
-      i_ra => ra,
-      i_rb => rb,
-      o_q  => adder_q);
+      clk    => clk,
+      clkena => nstall_req,
+      i_ra   => ra,
+      i_rb   => rb,
+      o_q    => adder_q);
 
   substracter : entity work.ALU_Substracter
     generic map (
       DATA_WIDTH => DATA_WIDTH)
     port map (
-      i_ra => ra,
-      i_rb => rb,
-      o_q  => substracter_q);
+      clk    => clk,
+      clkena => nstall_req,
+      i_ra   => ra,
+      i_rb   => rb,
+      o_q    => substracter_q);
 
   multiplier : entity work.ALU_Multiplier
     generic map (
       DATA_WIDTH => DATA_WIDTH)
     port map (
+      clk    => clk,
+      clkena => nstall_req,
       i_ra => ra,
       i_rb => rb,
       o_q  => multiplier_q);
@@ -124,91 +120,142 @@ begin  -- architecture rtl
     generic map (
       DATA_WIDTH => DATA_WIDTH)
     port map (
+      clk    => clk,
+      clkena => nstall_req,
       i_ra       => ra,
       i_rb       => rb,
       i_div_by_0 => i_divide_0,
       o_q        => divider_q);
+  --divider_q(DATA_WIDTH - 1 downto 0)              <= std_logic_vector(to_unsigned(1, divider_q'length / 2));
+  --divider_q(DATA_WIDTH * 2 - 1 downto DATA_WIDTH) <= std_logic_vector(to_unsigned(1, divider_q'length / 2));
 
   do_log_and : entity work.ALU_Log_And
     generic map (
       DATA_WIDTH => DATA_WIDTH)
     port map (
-      i_ra => ra,
-      i_rb => rb,
-      o_q  => log_and_q);
+      clk    => clk,
+      clkena => nstall_req,
+      i_ra   => ra,
+      i_rb   => rb,
+      o_q    => log_and_q);
 
   do_log_or : entity work.ALU_Log_or
     generic map (
       DATA_WIDTH => DATA_WIDTH)
     port map (
-      i_ra => ra,
-      i_rb => rb,
-      o_q  => log_or_q);
+      clk    => clk,
+      clkena => nstall_req,
+      i_ra   => ra,
+      i_rb   => rb,
+      o_q    => log_or_q);
 
   do_log_nor : entity work.ALU_Log_nor
     generic map (
       DATA_WIDTH => DATA_WIDTH)
     port map (
-      i_ra => ra,
-      i_rb => rb,
-      o_q  => log_nor_q);
+      clk    => clk,
+      clkena => nstall_req,
+      i_ra   => ra,
+      i_rb   => rb,
+      o_q    => log_nor_q);
 
   do_log_xor : entity work.ALU_Log_xor
     generic map (
       DATA_WIDTH => DATA_WIDTH)
     port map (
-      i_ra => ra,
-      i_rb => rb,
-      o_q  => log_xor_q);
+      clk    => clk,
+      clkena => nstall_req,
+      i_ra   => ra,
+      i_rb   => rb,
+      o_q    => log_xor_q);
 
   do_slt : entity work.ALU_Set_Lower_Than
     generic map (
       DATA_WIDTH => DATA_WIDTH)
     port map (
-      rst  => rst,
-      i_ra => ra,
-      i_rb => rb,
-      o_q  => slt_q);
+      clk    => clk,
+      clkena => nstall_req,
+      i_ra   => ra,
+      i_rb   => rb,
+      o_q    => slt_q);
 
-  with alu_op select q <=
-    adder_q       when add,
-    substracter_q when substract,
-    multiplier_q  when multiply,
-    divider_q     when divide,
-    log_and_q     when log_and,
-    log_or_q      when log_or,
-    log_nor_q     when log_nor,
-    log_xor_q     when log_xor,
-    slt_q         when slt,
-    adder_q       when all_zero;
+  ALU_Mux_1 : entity work.ALU_Mux
+    generic map (
+      DATA_WIDTH => DATA_WIDTH)
+    port map (
+      i_alu_op    => alu_op_q,
+      i_add       => std_logic_vector(adder_q),
+      i_sub       => std_logic_vector(substracter_q),
+      i_mul       => std_logic_vector(multiplier_q),
+      i_div       => std_logic_vector(divider_q),
+      i_and       => std_logic_vector(log_and_q),
+      i_or        => std_logic_vector(log_or_q),
+      i_xor       => std_logic_vector(log_xor_q),
+      i_nor       => std_logic_vector(log_nor_q),
+      i_slt       => std_logic_vector(slt_q),
+      unsigned(q) => q);
 
-  process(rst, clk, kill_req, stall_req)
+  o_q_sel : process(rst, clk, stall_req, kill_req, q)
   begin
-    if rst = '1' and rising_edge(clk) then
-      o_reg1.we   <= '0';
-      o_reg2.we   <= '0';
-      o_is_jump   <= '0';
-      o_mem_op    <= none;
-      o_instr_tag <= INSTR_TAG_NONE;
-    elsif kill_req = '1' and rising_edge(clk) then
-      o_reg1.we   <= '0';
-      o_reg2.we   <= '0';
-      o_is_jump   <= '0';
-      o_mem_op    <= none;
-      o_instr_tag <= INSTR_TAG_NONE;
-    elsif stall_req = '0' and rising_edge(clk) then
-      o_reg1.we     <= i_reg1.we;
-      o_reg1.idx    <= i_reg1.idx;
-      o_reg2.we     <= i_reg2.we;
-      o_reg2.idx    <= i_reg2.idx;
-      o_jump_target <= i_jump_target;
-      o_mem_data    <= i_mem_data;
-      o_mem_op      <= i_mem_op;
-      o_is_jump     <= is_jump;
+    o_reg1.data <= std_logic_vector(q(DATA_WIDTH -1 downto 0));
+    o_reg2.data <= std_logic_vector(q(DATA_WIDTH * 2 -1 downto DATA_WIDTH));
 
-      o_reg1.data <= std_logic_vector(q(DATA_WIDTH -1 downto 0));
-      o_reg2.data <= std_logic_vector(q(DATA_WIDTH * 2 -1 downto DATA_WIDTH));
-      o_instr_tag <= i_instr_tag;
+    if rst = '1' then
+      alu_op_q <= all_zero;
+    elsif rising_edge(clk) then
+      if kill_req = '1' then
+      elsif stall_req = '1' then
+      else
+        alu_op_q <= alu_op;
+      end if;
+    end if;
+  end process o_q_sel;
+
+  ready : process(rst, clk)
+    variable shifter : std_logic_vector(3 downto 0);
+  begin
+    if rst = '1' then
+      shifter := b"1111";
+    elsif rising_edge(clk) then
+      if alu_op = multiply or alu_op = divide then
+        shifter := b"0000";
+      else
+        shifter := b"1" & shifter(3 downto 1);
+      end if;
+    end if;
+    o_ready <= shifter(0);
+  end process ready;
+
+  process(rst, clk)
+    variable itag : instr_tag_t;
+  begin
+    if rst = '1' then
+      o_reg1.we         <= '0';
+      o_reg2.we         <= '0';
+      o_mem_op          <= none;
+      o_instr_tag.valid <= false;
+    else
+      if rising_edge(clk) then
+        if kill_req = '1' then
+          o_reg1.we   <= '0';
+          o_reg2.we   <= '0';
+          o_mem_op    <= none;
+          itag.valid  := false;
+          o_instr_tag <= itag;
+        elsif stall_req = '1' then
+        else
+          o_reg1.we     <= i_reg1.we;
+          o_reg1.idx    <= i_reg1.idx;
+          o_reg2.we     <= i_reg2.we;
+          o_reg2.idx    <= i_reg2.idx;
+          o_jump_target <= i_jump_target;
+          o_mem_data    <= i_mem_data;
+          o_mem_op      <= i_mem_op;
+
+          itag        := i_instr_tag;
+          o_instr_tag <= itag;
+        end if;
+      end if;
     end if;
   end process;
 
@@ -224,24 +271,40 @@ begin  -- architecture rtl
     end if;
   end process debug;
 
-  ra        <= (others => '0') when rst = '1' else unsigned(i_reg1.data);
-  rb        <= (others => '0') when rst = '1' else unsigned(i_reg2.data);
-  cond_zero <= '0'             when rst = '1' else
-               '1' when unsigned(q) = to_unsigned(0, q'length)
-               else '0';
-  cond_carry <= q(DATA_WIDTH);
-  jump_op    <= i_jump_op;
+  jumper : process(rst, clk, stall_req, kill_req)
+    variable jump                      : jump_type := none;
+    variable is_eq, is_lesser, do_jump : boolean;
+  begin
+    if rst = '1' then
+      jump := none;
+    elsif rising_edge(clk) then
+      if kill_req = '1' then
+        jump := none;
+      elsif stall_req = '1' then
+      else
+        is_eq     := (ra = rb);
+        is_lesser := (ra < rb);
+        case jump_op is
+          when always | none   => do_jump := (jump_op = always);
+          when zero            => do_jump := is_eq;
+          when non_zero        => do_jump := not is_eq;
+          when lesser_or_zero  => do_jump := is_lesser or is_eq;
+          when lesser          => do_jump := is_lesser;
+          when greater         => do_jump := not is_lesser and not is_eq;
+          when greater_or_zero => do_jump := not is_lesser;
+        end case;
+      end if;
+    end if;
 
-  is_jump <= '1' when
-             (jump_op = always) or
-             (jump_op = zero and cond_zero = '1') or
-             (jump_op = non_zero and cond_zero = '0') or
-             (jump_op = lesser_or_zero and (cond_carry = '1' or cond_zero = '1')) or
-             (jump_op = lesser and cond_carry = '1') or
-             (jump_op = greater and cond_carry = '0') or
-             (jump_op = greater_or_zero and (cond_carry = '0' or cond_zero = '1'))
-             else '0';
+    if do_jump then
+      o_is_jump <= '1';
+    else
+      o_is_jump <= '0';
+    end if;
+  end process jumper;
+
+  ra      <= (others => '0') when rst = '1' else unsigned(i_reg1.data);
+  rb      <= (others => '0') when rst = '1' else unsigned(i_reg2.data);
+  jump_op <= i_jump_op;
 
 end architecture rtl;
-
--------------------------------------------------------------------------------

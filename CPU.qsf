@@ -45,6 +45,7 @@ set_global_assignment -name PROJECT_CREATION_TIME_DATE "22:14:03  NOVEMBER 10, 2
 set_global_assignment -name LAST_QUARTUS_VERSION "16.1.0 Lite Edition"
 set_global_assignment -name PROJECT_OUTPUT_DIRECTORY output_files
 set_global_assignment -name SMART_RECOMPILE ON
+set_global_assignment -name VHDL_FILE EX/ALU_Mux.vhd
 set_global_assignment -name VHDL_FILE MIPS_CPU_Syn.vhd
 set_global_assignment -name VHDL_FILE Caches/tags_data_mem.vhd
 set_global_assignment -name VHDL_FILE Caches/tag_entry_mux.vhd

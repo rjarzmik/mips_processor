@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-12-06
--- Last update: 2016-12-06
+-- Last update: 2017-01-09
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -16,7 +16,7 @@
 -------------------------------------------------------------------------------
 -- Revisions  :
 -- Date        Version  Author  Description
--- 2016-12-06  1.0      rj	Created
+-- 2016-12-06  1.0      rj      Created
 -------------------------------------------------------------------------------
 
 library ieee;
@@ -27,32 +27,32 @@ use ieee.numeric_std.all;
 
 entity ALU_Adder is
   generic (
-    DATA_WIDTH   : integer
+    DATA_WIDTH : integer
     );
 
   port (
-    i_ra : in unsigned(DATA_WIDTH - 1 downto 0);
-    i_rb : in unsigned(DATA_WIDTH - 1 downto 0);
-    o_q : out unsigned(DATA_WIDTH * 2 - 1 downto 0)
+    clk    : in  std_logic;
+    clkena : in  std_logic;
+    i_ra   : in  unsigned(DATA_WIDTH - 1 downto 0);
+    i_rb   : in  unsigned(DATA_WIDTH - 1 downto 0);
+    o_q    : out unsigned(DATA_WIDTH * 2 - 1 downto 0)
     );
 end entity ALU_Adder;
 
--------------------------------------------------------------------------------
-
-architecture rtl of ALU_Adder is
-  -----------------------------------------------------------------------------
-  -- Internal signal declarations
-  -----------------------------------------------------------------------------
-  signal result : unsigned(DATA_WIDTH downto 0);
+architecture str of ALU_Adder is
+  signal result      : unsigned(DATA_WIDTH downto 0);
   signal sign_extend : unsigned(DATA_WIDTH - 2 downto 0);
 
 begin  -- architecture rtl
 
-  o_q <= sign_extend & result;
+  add : process(clk, clkena)
+  begin
+    if clkena = '1' and rising_edge(clk) then
+      o_q <= sign_extend & result;
+    end if;
+  end process add;
 
-  result <= resize(i_ra, DATA_WIDTH + 1) + resize(i_rb, DATA_WIDTH + 1);
+  result      <= resize(i_ra, DATA_WIDTH + 1) + resize(i_rb, DATA_WIDTH + 1);
   sign_extend <= (others => result(DATA_WIDTH));
 
-end architecture rtl;
-
--------------------------------------------------------------------------------
+end architecture str;
