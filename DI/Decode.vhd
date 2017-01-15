@@ -1,13 +1,13 @@
 -------------------------------------------------------------------------------
 -- Title      : Decode and Issue instruction
--- Project    : 
+-- Project    : MIPS CPU
 -------------------------------------------------------------------------------
 -- File       : Decode.vhd
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
--- Company    : 
+-- Company    :
 -- Created    : 2016-11-12
--- Last update: 2017-01-08
--- Platform   : 
+-- Last update: 2017-02-18
+-- Platform   :
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
 -- Description: Decode and Issue a MIPS instruction
@@ -15,21 +15,21 @@
 -- Copyright (c) 2016 
 -------------------------------------------------------------------------------
 -- Revisions  :
--- Date        Version  Author  Description
--- 2016-11-12  1.0      rj      Created
+-- Date        Version  Author                  Description
+-- 2016-11-12  1.0      robert.jarzmik@free.fr  Created
 -------------------------------------------------------------------------------
 
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
+library rjarzmik;
+use rjarzmik.slv_utils.slv_is_x;
+
 use work.cpu_defs.all;
 use work.instruction_defs.all;
 
--------------------------------------------------------------------------------
-
 entity Decode is
-
   generic (
     ADDR_WIDTH           : integer  := 32;
     DATA_WIDTH           : integer  := 32;
@@ -97,7 +97,7 @@ entity Decode is
   constant op_j    : std_logic_vector(5 downto 0) := "000010";
   constant op_jalr : std_logic_vector(5 downto 0) := "000011";
 
-  constant func_nop  : std_logic_vector(5 downto 0) := "000000";
+  constant func_nop : std_logic_vector(5 downto 0) := "000000";
 
   constant func_mul  : std_logic_vector(5 downto 0) := "011000";
   constant func_mulu : std_logic_vector(5 downto 0) := "011001";
@@ -123,15 +123,12 @@ entity Decode is
 
 end entity Decode;
 
--------------------------------------------------------------------------------
-
 architecture rtl of Decode is
   subtype addr_t is std_logic_vector(ADDR_WIDTH - 1 downto 0);
   subtype data_t is std_logic_vector(DATA_WIDTH - 1 downto 0);
 
-  alias ra : std_logic_vector(DATA_WIDTH - 1 downto 0) is o_reg1.data;
-  alias rb : std_logic_vector(DATA_WIDTH - 1 downto 0) is o_reg2.data;
-
+  signal ra : data_t;
+  signal rb : data_t;
   signal alu_op : alu_op_type;
 
   -----------------------------------------------------------------------------
@@ -152,8 +149,6 @@ architecture rtl of Decode is
   type reg_src is (bypassed_regfile, zero, immediate_unsigned, immediate_signextend);
   signal ra_src                : reg_src;
   signal rb_src                : reg_src;
-  signal bp_rs                 : register_port_type;
-  signal bp_rt                 : register_port_type;
   constant r0                  : data_t := (others => '0');
   signal rimmediate            : std_logic_vector(DATA_WIDTH / 2 - 1 downto 0);
   signal rimmediate_unsigned   : data_t;
@@ -176,9 +171,9 @@ begin  -- architecture rtl
   rwb_reg_wdata <= i_rwb_reg2.data & i_rwb_reg1.data;
   rfile : entity work.RegisterFile
     generic map (
-      DATA_WIDTH           => DATA_WIDTH,
-      NB_GP_REGISTERS      => NB_REGISTERS - NB_REGISTERS_SPECIAL,
-      NB_GPDW_REGISTERS    => NB_REGISTERS_SPECIAL)
+      DATA_WIDTH        => DATA_WIDTH,
+      NB_GP_REGISTERS   => NB_REGISTERS - NB_REGISTERS_SPECIAL,
+      NB_GPDW_REGISTERS => NB_REGISTERS_SPECIAL)
     port map (
       clk           => clk,
       rst           => rst,
@@ -270,14 +265,17 @@ begin  -- architecture rtl
     o_alu_op <= alu_op;
   end process alu;
 
-  registers : process(clk, stall_req, op_code, func, i_instruction, rimmediate,
-                      ra_src, rb_src, bp_rs, bp_rt, rfile_rs, rfile_rt,
-                      rimmediate_unsigned, rimmediate_signextend)
+  registers : process(clk, rst, stall_req, op_code, func, i_instruction, rimmediate,
+                      ra_src, rb_src, rfile_rs, rfile_rt,
+                      rimmediate_unsigned, rimmediate_signextend,
+                      i_bp_reg1, i_bp_reg2)
     variable asrc, bsrc : reg_src;
   begin
-    rsi <= to_integer(unsigned(i_instruction(25 downto 21)));
-    rti <= to_integer(unsigned(i_instruction(20 downto 16)));
-    rdi <= to_integer(unsigned(i_instruction(15 downto 11)));
+    if not slv_is_x(i_instruction) and rst = '0' then
+      rsi <= to_integer(unsigned(i_instruction(25 downto 21)));
+      rti <= to_integer(unsigned(i_instruction(20 downto 16)));
+      rdi <= to_integer(unsigned(i_instruction(15 downto 11)));
+    end if;
 
     rimmediate_signextend(immediate'length - 1 downto 0) <= rimmediate;
     rimmediate_signextend(rimmediate_signextend'length - 1 downto rimmediate'length)
@@ -286,38 +284,33 @@ begin  -- architecture rtl
     rimmediate_unsigned(rimmediate_unsigned'length - 1 downto rimmediate'length)
       <= (others => '0');
 
-    if rising_edge(clk) and stall_req = '0' then
-      rimmediate <= i_instruction(rimmediate'length - 1 downto 0);
+    case op_code is
+      when op_rtype =>
+        asrc := bypassed_regfile;
+        bsrc := bypassed_regfile;
+      when op_addi | op_addiu | op_slti | op_sltiu |
+        op_andi | op_ori | op_xori =>
+        asrc := bypassed_regfile;
+        bsrc := immediate_signextend;
+      when op_lw | op_lbu | op_lb | op_sw | op_sb =>
+        asrc := bypassed_regfile;
+        bsrc := immediate_unsigned;
+      when op_lui =>
+        asrc := zero;
+        bsrc := immediate_unsigned;
+      when others =>
+        asrc := bypassed_regfile;
+        bsrc := bypassed_regfile;
+    end case;
+    ra_src <= asrc;
+    rb_src <= bsrc;
 
-      bp_rs <= i_bp_reg1;
-      bp_rt <= i_bp_reg2;
-
-      case op_code is
-        when op_rtype =>
-          asrc := bypassed_regfile;
-          bsrc := bypassed_regfile;
-        when op_addi | op_addiu | op_slti | op_sltiu |
-          op_andi | op_ori | op_xori =>
-          asrc := bypassed_regfile;
-          bsrc := immediate_signextend;
-        when op_lw | op_lbu | op_lb | op_sw | op_sb =>
-          asrc := bypassed_regfile;
-          bsrc := immediate_unsigned;
-        when op_lui =>
-          asrc := zero;
-          bsrc := immediate_unsigned;
-        when others =>
-          asrc := bypassed_regfile;
-          bsrc := bypassed_regfile;
-      end case;
-      ra_src <= asrc;
-      rb_src <= bsrc;
-    end if;
+    rimmediate <= i_instruction(rimmediate'length - 1 downto 0);
 
     if ra_src = bypassed_regfile or ra_src = zero then
       if ra_src = bypassed_regfile then
-        if bp_rs.we = '1' then
-          ra <= bp_rs.data;
+        if i_bp_reg1.we = '1' then
+          ra <= i_bp_reg1.data;
         else
           ra <= rfile_rs;
         end if;
@@ -330,8 +323,8 @@ begin  -- architecture rtl
 
     if rb_src = bypassed_regfile or rb_src = zero then
       if rb_src = bypassed_regfile then
-        if bp_rt.we = '1' then
-          rb <= bp_rt.data;
+        if i_bp_reg2.we = '1' then
+          rb <= i_bp_reg2.data;
         else
           rb <= rfile_rt;
         end if;
@@ -345,6 +338,12 @@ begin  -- architecture rtl
         rb <= rimmediate_signextend;
       end if;
     end if;
+
+    if rising_edge(clk) then
+      o_reg1.data <= ra;
+      o_reg2.data <= rb;
+    end if;
+
   end process registers;
 
   rtargets : process(rst, clk, kill_req, stall_req, op_code, func, rsi, rti, rdi)
@@ -388,10 +387,10 @@ begin  -- architecture rtl
     end case;
 
     if rst = '1' then
-      o_reg1.we      <= '0';
-      o_reg2.we      <= '0';
-      o_reg1.idx     <= 0;
-      o_reg2.idx     <= 0;
+      o_reg1.we  <= '0';
+      o_reg2.we  <= '0';
+      o_reg1.idx <= 0;
+      o_reg2.idx <= 0;
     else
       if rising_edge(clk) then
         if kill_req = '1' then
@@ -403,10 +402,10 @@ begin  -- architecture rtl
           o_src_reg2_idx <= 0;
         elsif stall_req = '1' then
         else
-          o_reg1.we      <= reg1_we;
-          o_reg2.we      <= reg2_we;
-          o_reg1.idx     <= reg1_idx;
-          o_reg2.idx     <= reg2_idx;
+          o_reg1.we  <= reg1_we;
+          o_reg2.we  <= reg2_we;
+          o_reg1.idx <= reg1_idx;
+          o_reg2.idx <= reg2_idx;
         end if;
       end if;
     end if;
@@ -479,8 +478,8 @@ begin  -- architecture rtl
   end process jumper_op;
 
   jumper_target : process(clk, stall_req, op_code, func, i_instruction,
-                          next_pc, jt_mux_reg, jt_src,
-                          jt_addr_pcrelative, jt_addr_absolute)
+                          next_pc, jt_mux_reg, jt_src, immediate, ra,
+                          pc_displace, jt_addr_pcrelative, jt_addr_absolute)
     variable src : jt_t;
   begin
     pc_displace <= i_instruction(23 downto 0) & b"00";
@@ -498,23 +497,22 @@ begin  -- architecture rtl
         src := jt_absolute;
     end case;
 
-    if rising_edge(clk) and stall_req = '0' then
-      jt_src           <= src;
-      jt_addr_absolute <= next_pc(ADDR_WIDTH - 1 downto pc_displace'length) & pc_displace;
-      jt_addr_pcrelative <= std_logic_vector(unsigned(next_pc) +
-                                             unsigned(resize(immediate * 4, ADDR_WIDTH)));
-    end if;
+    jt_addr_absolute <= next_pc(ADDR_WIDTH - 1 downto pc_displace'length) & pc_displace;
+    jt_addr_pcrelative <= std_logic_vector(unsigned(next_pc) +
+                                           unsigned(resize(immediate * 4, ADDR_WIDTH)));
 
-    if jt_src = jt_absolute then
+    if src = jt_absolute then
       jt_mux_reg <= jt_addr_absolute;
     else
       jt_mux_reg <= jt_addr_pcrelative;
     end if;
 
-    if jt_src = jt_rs then
-      o_jump_target <= ra;
-    else
-      o_jump_target <= jt_mux_reg;
+    if rising_edge(clk) and stall_req = '0' then
+      if src = jt_rs then
+        o_jump_target <= ra;
+      else
+        o_jump_target <= jt_mux_reg;
+      end if;
     end if;
   end process jumper_target;
 

@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-12-06
--- Last update: 2017-01-09
+-- Last update: 2017-02-18
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -22,6 +22,9 @@
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
+
+library rjarzmik;
+use rjarzmik.slv_utils.slv_is_x;
 
 entity ALU_Set_Lower_Than is
   generic (
@@ -40,10 +43,10 @@ end entity ALU_Set_Lower_Than;
 architecture str of ALU_Set_Lower_Than is
 begin  -- architecture str
 
-  slt : process(clk, clkena)
+  slt : process(clk, clkena, i_ra, i_rb)
   begin
     if clkena = '1' and rising_edge(clk) then
-      if i_ra < i_rb then
+      if not slv_is_x(i_ra) and not slv_is_x(i_rb) and i_ra < i_rb then
         o_q <= to_unsigned(1, o_q'length);
       else
         o_q <= to_unsigned(0, o_q'length);

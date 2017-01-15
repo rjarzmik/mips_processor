@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-10
--- Last update: 2017-02-15
+-- Last update: 2017-02-17
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -69,7 +69,7 @@ begin  -- architecture rtl
     generic map (
       ADDR_WIDTH       => ADDR_WIDTH,
       DATA_WIDTH       => DATA_WIDTH,
-      DATAS_PER_LINE   => 64,
+      DATAS_PER_LINE   => 4,
       NB_WAYS          => 2,
       CACHE_SIZE_BYTES => 8192,
       LOWER_DATA_WIDTH => DATA_WIDTH,

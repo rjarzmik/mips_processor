@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-11
--- Last update: 2017-02-15
+-- Last update: 2017-02-18
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -130,7 +130,7 @@ architecture rtl of MIPS_CPU is
   signal ex2mem_reg1        : register_port_type;
   signal ex2mem_reg2        : register_port_type;
   signal ex2mem_jump_target : std_logic_vector(ADDR_WIDTH - 1 downto 0);
-  signal ex2mem_is_jump     : std_logic;
+  signal ex2mem_jump_op     : jump_type;
   signal ex2mem_mem_data    : std_logic_vector(DATA_WIDTH - 1 downto 0);
   signal ex2mem_mem_op      : memory_op_type;
   signal mem_instr_tag      : instr_tag_t;
@@ -146,7 +146,7 @@ architecture rtl of MIPS_CPU is
   signal mem2wb_reg1        : register_port_type;
   signal mem2wb_reg2        : register_port_type;
   signal mem2wb_jump_target : std_logic_vector(ADDR_WIDTH - 1 downto 0);
-  signal mem2wb_is_jump     : std_logic;
+  signal mem2wb_jump_op     : jump_type;
   signal wb_instr_tag       : instr_tag_t;
 
   signal wb_is_jump         : std_logic;
@@ -194,7 +194,7 @@ begin  -- architecture rtl
   -----------------------------------------------------------------------------
   -- Component instantiations
   -----------------------------------------------------------------------------
-  ife : entity work.Fetch(rtl3)
+  ife : entity work.Fetch(simple)
     generic map (
       ADDR_WIDTH => ADDR_WIDTH,
       DATA_WIDTH => DATA_WIDTH)
@@ -277,7 +277,7 @@ begin  -- architecture rtl
       o_reg1        => ex2mem_reg1,
       o_reg2        => ex2mem_reg2,
       o_jump_target => ex2mem_jump_target,
-      o_is_jump     => ex2mem_is_jump,
+      o_jump_op     => ex2mem_jump_op,
       o_mem_data    => ex2mem_mem_data,
       o_mem_op      => ex2mem_mem_op,
       o_instr_tag   => mem_m0_instr_tag,
@@ -299,22 +299,22 @@ begin  -- architecture rtl
       i_reg2        => ex2mem_reg2,
       i_mem_op      => ex2mem_mem_op,
       i_mem_data    => ex2mem_mem_data,
-      i_is_jump     => ex2mem_is_jump,
+      i_jump_op     => ex2mem_jump_op,
       i_jump_target => ex2mem_jump_target,
       i_instr_tag   => mem_m0_instr_tag,
 
       o_reg1        => mem2wb_reg1,
       o_reg2        => mem2wb_reg2,
       o_jump_target => mem2wb_jump_target,
-      o_is_jump     => mem2wb_is_jump,
+      o_jump_op     => mem2wb_jump_op,
 
-      o_stage1_reg1   => mem2ctrl_stage1_reg1,
-      o_stage1_reg2   => mem2ctrl_stage1_reg2,
-      o_stage2_reg1   => mem2ctrl_stage2_reg1,
-      o_stage2_reg2   => mem2ctrl_stage2_reg2,
-      o_m0_instr_tag  => mem_m1_instr_tag,
-      o_m1_instr_tag  => mem_m2_instr_tag,
-      o_m2_instr_tag  => wb_instr_tag,
+      o_stage1_reg1  => mem2ctrl_stage1_reg1,
+      o_stage1_reg2  => mem2ctrl_stage1_reg2,
+      o_stage2_reg1  => mem2ctrl_stage2_reg1,
+      o_stage2_reg2  => mem2ctrl_stage2_reg2,
+      o_m0_instr_tag => mem_m1_instr_tag,
+      o_m1_instr_tag => mem_m2_instr_tag,
+      o_m2_instr_tag => wb_instr_tag,
 
       -- Memory interface
       i_mem_rd_valid   => i_mem_rd_valid,
@@ -346,7 +346,7 @@ begin  -- architecture rtl
       i_reg1        => mem2wb_reg1,
       i_reg2        => mem2wb_reg2,
       i_jump_target => mem2wb_jump_target,
-      i_is_jump     => mem2wb_is_jump,
+      i_jump_op     => mem2wb_jump_op,
       o_reg1        => wb2di_reg1,
       o_reg2        => wb2di_reg2,
       o_is_jump     => wb_is_jump,
@@ -418,7 +418,7 @@ begin  -- architecture rtl
   o_dbg_mem_m0_pc <= dbg_mem_m0_pc;
   o_dbg_mem_m1_pc <= dbg_mem_m1_pc;
   o_dbg_mem_m2_pc <= dbg_mem_m2_pc;
-  o_dbg_wb_pc  <= dbg_wb_pc;
+  o_dbg_wb_pc     <= dbg_wb_pc;
 
   o_dbg_commited_pc <= dbg_commited_pc;
   o_dbg_ife_killed  <= ife_killed;
@@ -440,13 +440,13 @@ begin  -- architecture rtl
   o_dbg_wb2di_reg1 <= wb2di_reg1;
   o_dbg_wb2di_reg2 <= wb2di_reg2;
 
-  o_dbg_if_instr_tag      <= if_instr_tag;
-  o_dbg_di_instr_tag      <= di_instr_tag;
-  o_dbg_ex_instr_tag      <= ex_instr_tag;
-  o_dbg_mem_m0_instr_tag  <= mem_m0_instr_tag;
-  o_dbg_mem_m1_instr_tag  <= mem_m1_instr_tag;
-  o_dbg_mem_m2_instr_tag  <= mem_m2_instr_tag;
-  o_dbg_wb_instr_tag      <= wb_instr_tag;
+  o_dbg_if_instr_tag     <= if_instr_tag;
+  o_dbg_di_instr_tag     <= di_instr_tag;
+  o_dbg_ex_instr_tag     <= ex_instr_tag;
+  o_dbg_mem_m0_instr_tag <= mem_m0_instr_tag;
+  o_dbg_mem_m1_instr_tag <= mem_m1_instr_tag;
+  o_dbg_mem_m2_instr_tag <= mem_m2_instr_tag;
+  o_dbg_wb_instr_tag     <= wb_instr_tag;
 
   o_dbg_if_prediction <= dbg_if_prediction;
 

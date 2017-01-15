@@ -19,7 +19,7 @@
 #
 # Quartus Prime
 # Version 16.1.0 Build 196 10/24/2016 SJ Lite Edition
-# Date created = 22:35:04  February 14, 2017
+# Date created = 12:40:02  February 22, 2017
 #
 # -------------------------------------------------------------------------- #
 #
@@ -45,6 +45,9 @@ set_global_assignment -name PROJECT_CREATION_TIME_DATE "22:14:03  NOVEMBER 10, 2
 set_global_assignment -name LAST_QUARTUS_VERSION "16.1.0 Lite Edition"
 set_global_assignment -name PROJECT_OUTPUT_DIRECTORY output_files
 set_global_assignment -name SMART_RECOMPILE ON
+set_global_assignment -name VHDL_FILE IF/Fetch_Syn.vhd
+set_global_assignment -name VHDL_FILE EX/ALU_Multiplier.vhd
+set_global_assignment -name SDC_FILE CPU.out.sdc
 set_global_assignment -name VHDL_FILE EX/ALU_Mux.vhd
 set_global_assignment -name VHDL_FILE MIPS_CPU_Syn.vhd
 set_global_assignment -name VHDL_FILE rjarzmik/package/slv_utils.vhd -library rjarzmik
@@ -75,7 +78,6 @@ set_global_assignment -name VHDL_FILE ProgramCounter/Instruction_Tracker.vhd
 set_global_assignment -name VHDL_FILE instruction_tag.vhd
 set_global_assignment -name VHDL_FILE EX/ALU_Set_Lower_Than.vhd
 set_global_assignment -name VHDL_FILE EX/ALU_Substracter.vhd
-set_global_assignment -name VHDL_FILE EX/ALU_Multiplier.vhd
 set_global_assignment -name VHDL_FILE EX/ALU_Log_Xor.vhd
 set_global_assignment -name VHDL_FILE EX/ALU_Log_Or.vhd
 set_global_assignment -name VHDL_FILE EX/ALU_Log_Nor.vhd
@@ -95,6 +97,7 @@ set_global_assignment -name VHDL_FILE WB/Writeback.vhd
 set_global_assignment -name VHDL_FILE Control/Control_Decode_Dependencies.vhd
 set_global_assignment -name VHDL_FILE IF/Instruction_Provider.vhd
 set_global_assignment -name VHDL_FILE EX/ALU_Adder.vhd
+set_global_assignment -name SOURCE_FILE db/CPU.cmp.rdb
 
 # Classic Timing Assignments
 # ==========================
@@ -110,6 +113,7 @@ set_global_assignment -name EDA_DESIGN_ENTRY_SYNTHESIS_TOOL "<None>"
 set_global_assignment -name VHDL_INPUT_VERSION VHDL_2008
 set_global_assignment -name VHDL_SHOW_LMF_MAPPING_MESSAGES OFF
 set_global_assignment -name TOP_LEVEL_ENTITY MIPS_CPU_Syn
+set_global_assignment -name MUX_RESTRUCTURE OFF
 
 # Fitter Assignments
 # ==================
@@ -164,6 +168,12 @@ set_global_assignment -name OUTPUT_IO_TIMING_FAR_END_VMEAS "HALF SIGNAL SWING" -
 # end ASSIGNMENT_GROUP(virt)
 # --------------------------
 
+# -----------------------
+# start ENTITY(Fetch_Syn)
+
+# end ENTITY(Fetch_Syn)
+# ---------------------
+
 # --------------------------
 # start ENTITY(MIPS_CPU_Syn)
 
@@ -177,6 +187,10 @@ set_global_assignment -name OUTPUT_IO_TIMING_FAR_END_VMEAS "HALF SIGNAL SWING" -
 	set_instance_assignment -name VIRTUAL_PIN ON -to o_mem_wr_data
 	set_instance_assignment -name VIRTUAL_PIN ON -to o_mem_word_width
 
+	# Fitter Assignments
+	# ==================
+	set_instance_assignment -name GLOBAL_SIGNAL GLOBAL_CLOCK -to clk
+
 	# start DESIGN_PARTITION(Top)
 	# ---------------------------
 
@@ -185,10 +199,10 @@ set_global_assignment -name OUTPUT_IO_TIMING_FAR_END_VMEAS "HALF SIGNAL SWING" -
 		set_global_assignment -name PARTITION_NETLIST_TYPE SOURCE -section_id Top
 		set_global_assignment -name PARTITION_FITTER_PRESERVATION_LEVEL PLACEMENT_AND_ROUTING -section_id Top
 		set_global_assignment -name PARTITION_COLOR 16764057 -section_id Top
+		set_instance_assignment -name PARTITION_HIERARCHY root_partition -to | -section_id Top
 
 	# end DESIGN_PARTITION(Top)
 	# -------------------------
 
 # end ENTITY(MIPS_CPU_Syn)
 # ------------------------
-set_instance_assignment -name PARTITION_HIERARCHY root_partition -to | -section_id Top

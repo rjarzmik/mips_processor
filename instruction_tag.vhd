@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-12-07
--- Last update: 2017-01-04
+-- Last update: 2017-01-14
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -28,6 +28,11 @@ package instruction_defs is
   -- Smallest 2 power with at least : None, Fetch, Decode/Issue, Execute, Memory, Writeback
   constant NB_PIPELINE_STAGES : natural := 16;
 
+  constant flag_zero       : natural := 1;
+  constant flag_carry      : natural := 2;
+  constant flag_fault_if   : natural := 3;
+  constant flag_fault_data : natural := 4;
+
   type instr_tag_t is record
     valid           : boolean;
     tag             : natural range 0 to NB_PIPELINE_STAGES - 1;
@@ -35,16 +40,17 @@ package instruction_defs is
     is_ja           : boolean;
     is_jr           : boolean;
     is_branch_taken : boolean;
+    flags           : std_logic_vector(4 downto 0);
   end record;
 
   constant INSTR_TAG_NONE : instr_tag_t := (
     tag             => 0, valid => false,
     is_branch       => false, is_ja => false, is_jr => false,
-    is_branch_taken => false);
+    is_branch_taken => false, flags => (others => '0'));
   constant INSTR_TAG_FIRST_VALID : instr_tag_t := (
     tag             => 0, valid => true,
     is_branch       => false, is_ja => false, is_jr => false,
-    is_branch_taken => false);
+    is_branch_taken => false, flags => (others => '0'));
 
   function get_instr_change_is_branch(itag          : instr_tag_t;
                                       new_is_branch : boolean)

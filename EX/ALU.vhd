@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik (Intel)  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-16
--- Last update: 2017-01-09
+-- Last update: 2017-02-18
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -22,6 +22,9 @@
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
+
+library rjarzmik;
+use rjarzmik.slv_utils.slv_is_x;
 
 use work.cpu_defs.all;
 use work.instruction_defs.all;
@@ -53,7 +56,7 @@ entity ALU is
     o_reg1        : out register_port_type;
     o_reg2        : out register_port_type;
     o_jump_target : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
-    o_is_jump     : out std_logic;
+    o_jump_op     : out jump_type;
     o_mem_data    : out std_logic_vector(DATA_WIDTH - 1 downto 0);
     o_mem_op      : out memory_op_type;
     o_instr_tag   : out instr_tag_t;
@@ -70,7 +73,6 @@ architecture rtl of ALU is
 
   signal nstall_req : std_logic;
   signal q          : unsigned(DATA_WIDTH * 2 - 1 downto 0) := (others => '0');
-  signal jump_op    : jump_type;
 
   signal alu_op_q      : alu_op_type;
   signal adder_q       : unsigned(DATA_WIDTH * 2 - 1 downto 0);
@@ -84,7 +86,7 @@ architecture rtl of ALU is
   signal slt_q         : unsigned(DATA_WIDTH * 2 - 1 downto 0);
 
 begin  -- architecture rtl
-  nstall_req <= not stall_req;
+  nstall_req <= not stall_req and not rst;
 
   adder : entity work.ALU_Adder
     generic map (
@@ -106,28 +108,36 @@ begin  -- architecture rtl
       i_rb   => rb,
       o_q    => substracter_q);
 
+  --multiplier : entity work.ALU_Multiplier_Altera
+  --  port map (
+  --    clock  => clk,
+  --    clken  => nstall_req,
+  --    dataa  => std_logic_vector(ra),
+  --    datab  => std_logic_vector(rb),
+  --    result => multiplier_q);
+
   multiplier : entity work.ALU_Multiplier
     generic map (
       DATA_WIDTH => DATA_WIDTH)
     port map (
       clk    => clk,
       clkena => nstall_req,
-      i_ra => ra,
-      i_rb => rb,
-      o_q  => multiplier_q);
+      i_ra   => ra,
+      i_rb   => rb,
+      o_q    => multiplier_q);
 
-  divider : entity work.ALU_Divider
-    generic map (
-      DATA_WIDTH => DATA_WIDTH)
-    port map (
-      clk    => clk,
-      clkena => nstall_req,
-      i_ra       => ra,
-      i_rb       => rb,
-      i_div_by_0 => i_divide_0,
-      o_q        => divider_q);
-  --divider_q(DATA_WIDTH - 1 downto 0)              <= std_logic_vector(to_unsigned(1, divider_q'length / 2));
-  --divider_q(DATA_WIDTH * 2 - 1 downto DATA_WIDTH) <= std_logic_vector(to_unsigned(1, divider_q'length / 2));
+  --divider : entity work.ALU_Divider
+  --  generic map (
+  --    DATA_WIDTH => DATA_WIDTH)
+  --  port map (
+  --    clk    => clk,
+  --    clkena => nstall_req,
+  --    i_ra       => ra,
+  --    i_rb       => rb,
+  --    i_div_by_0 => i_divide_0,
+  --    o_q        => divider_q);
+  divider_q(DATA_WIDTH - 1 downto 0)              <= to_unsigned(1, divider_q'length / 2);
+  divider_q(DATA_WIDTH * 2 - 1 downto DATA_WIDTH) <= to_unsigned(1, divider_q'length / 2);
 
   do_log_and : entity work.ALU_Log_And
     generic map (
@@ -226,15 +236,27 @@ begin  -- architecture rtl
     o_ready <= shifter(0);
   end process ready;
 
-  process(rst, clk)
+  process(rst, clk, ra, rb)
     variable itag : instr_tag_t;
   begin
-    if rst = '1' then
-      o_reg1.we         <= '0';
-      o_reg2.we         <= '0';
-      o_mem_op          <= none;
-      o_instr_tag.valid <= false;
+    if rst = '1' or slv_is_x(ra) or slv_is_x(rb) then
+      o_reg1.we   <= '0';
+      o_reg2.we   <= '0';
+      o_mem_op    <= none;
+      o_instr_tag <= INSTR_TAG_NONE;
     else
+      itag := i_instr_tag;
+      if ra = rb then
+        itag.flags(flag_zero) := '1';
+      else
+        itag.flags(flag_zero) := '0';
+      end if;
+      if ra < rb then
+        itag.flags(flag_carry) := '1';
+      else
+        itag.flags(flag_carry) := '0';
+      end if;
+
       if rising_edge(clk) then
         if kill_req = '1' then
           o_reg1.we   <= '0';
@@ -252,7 +274,6 @@ begin  -- architecture rtl
           o_mem_data    <= i_mem_data;
           o_mem_op      <= i_mem_op;
 
-          itag        := i_instr_tag;
           o_instr_tag <= itag;
         end if;
       end if;
@@ -271,40 +292,20 @@ begin  -- architecture rtl
     end if;
   end process debug;
 
-  jumper : process(rst, clk, stall_req, kill_req)
-    variable jump                      : jump_type := none;
-    variable is_eq, is_lesser, do_jump : boolean;
+  ra <= unsigned(i_reg1.data);
+  rb <= unsigned(i_reg2.data);
+
+  jumper : process(rst, clk, kill_req, stall_req, i_jump_op)
   begin
     if rst = '1' then
-      jump := none;
+      o_jump_op <= none;
     elsif rising_edge(clk) then
       if kill_req = '1' then
-        jump := none;
-      elsif stall_req = '1' then
-      else
-        is_eq     := (ra = rb);
-        is_lesser := (ra < rb);
-        case jump_op is
-          when always | none   => do_jump := (jump_op = always);
-          when zero            => do_jump := is_eq;
-          when non_zero        => do_jump := not is_eq;
-          when lesser_or_zero  => do_jump := is_lesser or is_eq;
-          when lesser          => do_jump := is_lesser;
-          when greater         => do_jump := not is_lesser and not is_eq;
-          when greater_or_zero => do_jump := not is_lesser;
-        end case;
+        o_jump_op <= none;
+      elsif stall_req = '0' then
+        o_jump_op <= i_jump_op;
       end if;
     end if;
-
-    if do_jump then
-      o_is_jump <= '1';
-    else
-      o_is_jump <= '0';
-    end if;
   end process jumper;
-
-  ra      <= (others => '0') when rst = '1' else unsigned(i_reg1.data);
-  rb      <= (others => '0') when rst = '1' else unsigned(i_reg2.data);
-  jump_op <= i_jump_op;
 
 end architecture rtl;

@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-13
--- Last update: 2016-12-11
+-- Last update: 2017-01-11
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -197,4 +197,31 @@ begin  -- architecture rtl
 
 end architecture rtl;
 
--------------------------------------------------------------------------------
+architecture simple of PC_Register is
+  signal itag : instr_tag_t;
+begin
+  itag.valid <= true;
+  o_mispredicted <= jump_pc;
+
+  process(clk, rst, stall_pc, jump_pc)
+    variable pc : std_logic_vector(ADDR_WIDTH - 1 downto 0);
+  begin
+    if rst = '1' then
+      pc           := (others => '0');
+      o_current_pc <= pc;
+      o_next_pc    <= std_logic_vector(to_unsigned(STEP, o_next_pc'length));
+    elsif rising_edge(clk) and stall_pc = '0' then
+      if jump_pc = '1' then
+        pc           := jump_target;
+        o_current_pc <= pc;
+        o_next_pc    <= std_logic_vector(unsigned(pc) + STEP);
+      else
+        pc           := std_logic_vector(unsigned(pc) + 4);
+        o_current_pc <= pc;
+        o_next_pc    <= std_logic_vector(unsigned(pc) + 4);
+      end if;
+      o_current_pc_instr_tag <= itag;
+      o_next_pc_instr_tag <= itag;
+    end if;
+  end process;
+end architecture simple;

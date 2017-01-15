@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-16
--- Last update: 2017-01-08
+-- Last update: 2017-01-14
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -43,7 +43,7 @@ entity Writeback is
     i_reg1        : in register_port_type;
     i_reg2        : in register_port_type;
     i_jump_target : in std_logic_vector(ADDR_WIDTH - 1 downto 0);
-    i_is_jump     : in std_logic;
+    i_jump_op     : in jump_type;
 
     o_reg1        : out register_port_type;
     o_reg2        : out register_port_type;
@@ -59,126 +59,12 @@ entity Writeback is
 
 end entity Writeback;
 
--------------------------------------------------------------------------------
-
-architecture rtl of Writeback is
-
-  -----------------------------------------------------------------------------
-  -- Internal signal declarations
-  -----------------------------------------------------------------------------
-  signal reg1             : register_port_type;
-  signal reg2             : register_port_type;
-  signal is_nop           : boolean;
-  signal last_is_jump     : std_logic;
-  signal last_jump_target : std_logic_vector(ADDR_WIDTH - 1 downto 0);
-  signal last_instr_tag   : instr_tag_t;
-
-begin  -- architecture rtl
-
-  -----------------------------------------------------------------------------
-  -- Component instantiations
-  -----------------------------------------------------------------------------
-
-  is_nop <= true when i_reg1.we = '0' and i_reg2.we = '0' and
-            not i_instr_tag.is_branch and not i_instr_tag.is_ja and
-            not i_instr_tag.is_jr else false;
-
-  process(rst, clk, stall_req)
-  begin
-    if rst = '1' then
-      reg1.we          <= '0';
-      reg2.we          <= '0';
-      o_instr_tag      <= INSTR_TAG_NONE;
-      last_instr_tag   <= INSTR_TAG_NONE;
-      last_is_jump     <= '0';
-      last_jump_target <= (others => 'X');
-    elsif rising_edge(clk) then
-      if kill_req = '1' then
-        reg1.we       <= '0';
-        reg2.we       <= '0';
-        o_is_jump     <= '0';
-        o_jump_target <= (others => 'X');
-        o_instr_tag   <= INSTR_TAG_NONE;
-      elsif stall_req = '0' then
-        if not is_nop then
-          last_instr_tag <=
-            get_instr_change_is_branch_taken(i_instr_tag, i_is_jump = '1');
-          last_is_jump     <= i_is_jump;
-          last_jump_target <= i_jump_target;
-        end if;
-
-        -- Branch delay slot of 1 :
-        ---   If branch or jump, delay setting o_is_jump and o_jump_target to
-        ---   the next no-NOP instruction
-        ---   If not, forward as is.
-        if (last_instr_tag.is_branch or last_instr_tag.is_ja
-            or last_instr_tag.is_jr) and not is_nop then
-          -- Falsify the outputs to fake the jump/branch happens on the next
-          -- after jump/branch instruction, ie. delay slot of 1.
-          -- Transfer the jump and the writeback instruction together
-          -- The o_instr_tag is changed from the instruction just after the
-          -- branch to the instruction branch, for branch prediction.
-          o_is_jump     <= last_is_jump;
-          o_jump_target <= last_jump_target;
-          o_instr_tag <=
-            get_instr_change_is_branch_taken(
-              get_instr_change_is_branch(
-                get_instr_change_is_ja(
-                  get_instr_change_is_jr(i_instr_tag, last_instr_tag.is_jr),
-                  last_instr_tag.is_ja),
-                last_instr_tag.is_branch),
-              last_instr_tag.is_branch_taken);
-        elsif (i_instr_tag.is_branch or i_instr_tag.is_ja
-               or i_instr_tag.is_jr) then
-          -- As the jump information is kept in last_*, wipe out any
-          -- jump/branch sign from this instruction, as it will be reapplied on
-          -- the next one.
-          o_is_jump     <= '0';
-          o_jump_target <= (others => 'X');
-          o_instr_tag <=
-            get_instr_change_is_branch_taken(
-              get_instr_change_is_branch(
-                get_instr_change_is_ja(
-                  get_instr_change_is_jr(i_instr_tag, false),
-                  false),
-                false),
-              false);
-        else
-          -- Here there wasn't a "jump/branch" kept nor on the input
-          -- instruction, so forward normally everything.
-          o_is_jump     <= i_is_jump;
-          o_jump_target <= i_jump_target;
-          o_instr_tag   <= i_instr_tag;
-        end if;
-
-        reg1 <= i_reg1;
-        reg2 <= i_reg2;
-      end if;
-    end if;
-  end process;
-
-  debug : process(rst, clk, stall_req, kill_req)
-  begin
-    if rst = '1' then
-      o_dbg_wb_pc <= (others => 'X');
-    elsif rising_edge(clk) and kill_req = '1' then
-      o_dbg_wb_pc <= (others => 'X');
-    elsif rising_edge(clk) and stall_req = '1' then
-    elsif rising_edge(clk) then
-      o_dbg_wb_pc <= i_dbg_wb_pc;
-    end if;
-  end process debug;
-
-  o_reg1 <= reg1;
-  o_reg2 <= reg2;
-
-end architecture rtl;
-
 architecture str of Writeback is
   subtype addr_t is std_logic_vector(ADDR_WIDTH - 1 downto 0);
   subtype data_t is std_logic_vector(DATA_WIDTH - 1 downto 0);
 
   type state_t is (normal, jump_recorded);
+  signal is_jump : std_ulogic;
 
 begin
   process(rst, clk, stall_req, kill_req, i_instr_tag)
@@ -215,7 +101,7 @@ begin
 
           case state is
             when normal =>
-              if i_is_jump = '1' then
+              if is_jump = '1' then
                 -- Record the jump and transition state
                 state           := jump_recorded;
                 recorded_target := i_jump_target;
@@ -230,7 +116,7 @@ begin
                 recorded_itag := i_instr_tag;
               end if;
             when jump_recorded =>
-              if i_is_jump = '1' or not is_nop then
+              if is_jump = '1' or not is_nop then
                 -- Delay slot instruction
                 state                  := normal;
                 o_is_jump              <= '1';
@@ -249,6 +135,37 @@ begin
       o_jump_target <= recorded_target;
     end if;
   end process;
+
+  jumper : process(i_jump_op, i_instr_tag.flags)
+    variable jump                      : jump_type := none;
+    variable is_eq, is_lesser, do_jump : boolean;
+  begin
+    is_eq     := false;
+    is_lesser := false;
+    if i_instr_tag.flags(flag_zero) = '1' then
+      is_eq := true;
+    end if;
+    if i_instr_tag.flags(flag_carry) = '1' then
+      is_lesser := false;
+    end if;
+
+    case i_jump_op is
+      when always          => do_jump := true;
+      when none            => do_jump := false;
+      when zero            => do_jump := is_eq;
+      when non_zero        => do_jump := not is_eq;
+      when lesser_or_zero  => do_jump := is_lesser or is_eq;
+      when lesser          => do_jump := is_lesser;
+      when greater         => do_jump := not is_lesser and not is_eq;
+      when greater_or_zero => do_jump := not is_lesser;
+    end case;
+
+    if do_jump then
+      is_jump <= '1';
+    else
+      is_jump <= '0';
+    end if;
+  end process jumper;
 
   debug : process(rst, clk, stall_req, kill_req)
   begin

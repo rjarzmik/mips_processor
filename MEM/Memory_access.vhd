@@ -6,7 +6,7 @@
 -- Author     : Simon Desfarges
 -- Company    : 
 -- Created    : 2016-11-24
--- Last update: 2017-01-04
+-- Last update: 2017-01-14
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -68,17 +68,17 @@ entity Memory_access is
                                         -- store in memory
 
 -- Carry-over signals
-    i_is_jump     : in std_logic;       -- not used, to be fwded
+    i_jump_op     : in jump_type;       -- not used, to be fwded
     i_jump_target : in std_logic_vector(ADDR_WIDTH - 1 downto 0);  -- not used, to be fwded
     i_instr_tag   : in instr_tag_t;
 
-    o_reg1        : out register_port_type;
-    o_reg2        : out register_port_type;
-    o_jump_target : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
-    o_is_jump     : out std_logic;
-    o_m0_instr_tag  : out instr_tag_t;
-    o_m1_instr_tag  : out instr_tag_t;
-    o_m2_instr_tag  : out instr_tag_t;
+    o_reg1         : out register_port_type;
+    o_reg2         : out register_port_type;
+    o_jump_target  : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
+    o_jump_op      : out jump_type;
+    o_m0_instr_tag : out instr_tag_t;
+    o_m1_instr_tag : out instr_tag_t;
+    o_m2_instr_tag : out instr_tag_t;
 
     -- Control hazard outputs. Needed to check RAW hazards
     o_stage1_reg1 : out register_port_type;
@@ -117,7 +117,7 @@ architecture rtl of Memory_access is
   signal r1_reg2   : register_port_type;
   signal r1_mem_op : memory_op_type;
 
-  signal r1_is_jump     : std_logic;
+  signal r1_jump_op     : jump_type;
   signal r1_jump_target : std_logic_vector(ADDR_WIDTH - 1 downto 0);
   signal r1_instr_tag   : instr_tag_t;
 
@@ -125,7 +125,7 @@ architecture rtl of Memory_access is
   signal r2_reg2   : register_port_type;
   signal r2_mem_op : memory_op_type;
 
-  signal r2_is_jump     : std_logic;
+  signal r2_jump_op     : jump_type;
   signal r2_jump_target : std_logic_vector(ADDR_WIDTH - 1 downto 0);
   signal r2_instr_tag   : instr_tag_t;
 
@@ -183,7 +183,7 @@ begin  -- architecture rtl
     if rst = '1' then                   -- asynchronous reset (active high)
       r1_mem_op      <= none;
       r1_jump_target <= (others => '0');
-      r1_is_jump     <= '0';
+      r1_jump_op     <= none;
       r1_reg1.we     <= '0';
       r1_reg1.idx    <= 0;
       r1_reg1.data   <= (others => '0');
@@ -191,10 +191,10 @@ begin  -- architecture rtl
       r1_reg2.idx    <= 0;
       r1_reg2.data   <= (others => '0');
       r1_instr_tag   <= INSTR_TAG_NONE;
-      r1_dbg_mem_pc <= (others => 'X');
+      r1_dbg_mem_pc  <= (others => 'X');
       r2_mem_op      <= none;
       r2_jump_target <= (others => '0');
-      r2_is_jump     <= '0';
+      r2_jump_op     <= none;
       r2_reg1.we     <= '0';
       r2_reg1.idx    <= 0;
       r2_reg1.data   <= (others => '0');
@@ -202,12 +202,12 @@ begin  -- architecture rtl
       r2_reg2.idx    <= 0;
       r2_reg2.data   <= (others => '0');
       r2_instr_tag   <= INSTR_TAG_NONE;
-      r2_dbg_mem_pc <= (others => 'X');
+      r2_dbg_mem_pc  <= (others => 'X');
     elsif rising_edge(clk) then         -- rising clock edge
       if kill_req = '1' then
         r1_mem_op      <= none;
         r1_jump_target <= (others => '0');
-        r1_is_jump     <= '0';
+        r1_jump_op     <= none;
         r1_reg1.we     <= '0';
         r1_reg1.idx    <= 0;
         r1_reg1.data   <= (others => '0');
@@ -218,7 +218,7 @@ begin  -- architecture rtl
         r1_dbg_mem_pc  <= (others => 'X');
         r2_mem_op      <= none;
         r2_jump_target <= (others => '0');
-        r2_is_jump     <= '0';
+        r2_jump_op     <= none;
         r2_reg1.we     <= '0';
         r2_reg1.idx    <= 0;
         r2_reg1.data   <= (others => '0');
@@ -238,7 +238,7 @@ begin  -- architecture rtl
 
           r1_mem_op <= i_mem_op;
 
-          r1_is_jump     <= i_is_jump;
+          r1_jump_op     <= i_jump_op;
           r1_jump_target <= i_jump_target;
 
           r1_instr_tag  <= i_instr_tag;
@@ -253,7 +253,7 @@ begin  -- architecture rtl
 
           r2_mem_op <= r1_mem_op;
 
-          r2_is_jump     <= r1_is_jump;
+          r2_jump_op     <= r1_jump_op;
           r2_jump_target <= r1_jump_target;
 
           r2_instr_tag  <= r1_instr_tag;
@@ -324,14 +324,14 @@ begin  -- architecture rtl
       o_reg2.data <= (others => '0');
 
       o_jump_target <= (others => '0');
-      o_is_jump     <= '0';
+      o_jump_op     <= none;
       o_exception   <= '0';
     elsif rising_edge(clk) then
       o_exception <= '0';
       if kill_req = '1' then             -- outputs a NOP
         o_reg1.we <= '0';
         o_reg2.we <= '0';
-        o_is_jump <= '0';
+        o_jump_op <= none;
         if (r2_mem_op = store8
             or r2_mem_op = storew) then  -- For now a store cannot be killed.
                                          -- (because it is hard to roll-back the
@@ -370,7 +370,7 @@ begin  -- architecture rtl
 
         o_reg2        <= r2_reg2;
         o_jump_target <= r2_jump_target;
-        o_is_jump     <= r2_is_jump;
+        o_jump_op     <= r2_jump_op;
       end if;
     end if;
   end process;
@@ -384,9 +384,9 @@ begin  -- architecture rtl
       o_m2_instr_tag <= INSTR_TAG_NONE;
     elsif rising_edge(clk) then
       if kill_req = '1' then
-      o_m0_instr_tag <= INSTR_TAG_NONE;
-      o_m1_instr_tag <= INSTR_TAG_NONE;
-      o_m2_instr_tag <= INSTR_TAG_NONE;
+        o_m0_instr_tag <= INSTR_TAG_NONE;
+        o_m1_instr_tag <= INSTR_TAG_NONE;
+        o_m2_instr_tag <= INSTR_TAG_NONE;
       elsif stall_req = '1' or s_need_stall = '1' then
       else
         o_m2_instr_tag <= r2_instr_tag;

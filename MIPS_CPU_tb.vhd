@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-12
--- Last update: 2017-02-14
+-- Last update: 2017-02-18
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -410,7 +410,7 @@ begin  -- architecture rtl
           dbg_get_regwrite_string(dbg_wb2di_reg2) &
           dbg_get_jump_string(dbg_jump_pc, dbg_jump_target) & " " &
           dbg_get_prediction_string(dbg_if_prediction, last_prediction);
-        if dbg_commited_pc /= unusable_op then
+        if dbg_commited_pc /= unusable_op and dbg_commited_itag.valid then
           if to_integer(unsigned(dbg_commited_pc)) = 0 then
             passed_by_addr0 := passed_by_addr0 + 1;
           end if;
