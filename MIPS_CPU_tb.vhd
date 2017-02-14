@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-12
--- Last update: 2017-01-05
+-- Last update: 2017-02-14
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -51,12 +51,10 @@ architecture rtl of MIPS_CPU_tb is
   signal Rst  : std_logic := '1';
   signal stop : std_logic := '0';
 
-  -- L2 connections
-  signal cls_creq            : cache_request_t;
-  signal cls_cresp           : cache_response_t;
+  -- L2/Memory connections
   signal o_memory_req        : std_logic := '0';
   signal o_memory_we         : std_logic := '0';
-  signal o_memory_addr       : addr_t;
+  signal o_memory_addr       : std_logic_vector(ADDR_WIDTH - 1 downto 0);
   signal o_memory_write_data : std_logic_vector(DATA_WIDTH - 1 downto 0);
   signal i_memory_read_data  : std_logic_vector(DATA_WIDTH - 1 downto 0);
   signal i_memory_valid      : std_logic;
@@ -300,8 +298,6 @@ begin  -- architecture rtl
     port map (
       clk                      => clk,
       rst                      => rst,
-      o_creq                   => cls_creq,
-      i_cresp                  => cls_cresp,
       o_mem_addr               => o_mem_addr,
       i_mem_rd_valid           => i_mem_rd_valid,
       i_mem_rd_data            => i_mem_rd_data,
@@ -309,6 +305,12 @@ begin  -- architecture rtl
       o_mem_word_width         => o_mem_word_width,
       o_mem_wr_data            => o_mem_wr_data,
       i_mem_wr_ack             => i_mem_wr_ack,
+      o_memory_req             => o_memory_req,
+      o_memory_we              => o_memory_we,
+      o_memory_addr            => o_memory_addr,
+      i_memory_rdata           => i_memory_read_data,
+      o_memory_wdata           => o_memory_write_data,
+      i_memory_done            => i_memory_valid,
       o_dbg_if_pc              => dbg_if_pc,
       o_dbg_di_pc              => dbg_di_pc,
       o_dbg_ex_pc              => dbg_ex_pc,
@@ -342,24 +344,6 @@ begin  -- architecture rtl
       o_dbg_wb_instr_tag       => dbg_wb_itag,
       o_dbg_if_prediction      => dbg_if_prediction
       );
-
-  cls : entity work.cache_line_streamer
-    generic map (
-      ADDR_WIDTH           => ADDR_WIDTH,
-      DATA_WIDTH           => DATA_WIDTH,
-      DATAS_PER_LINE_WIDTH => DATAS_PER_LINE_WIDTH)
-    port map (
-      clk     => clk,
-      rst     => rst,
-      i_creq  => cls_creq,
-      o_cresp => cls_cresp,
-
-      o_memory_req   => o_memory_req,
-      o_memory_we    => o_memory_we,
-      o_memory_addr  => o_memory_addr,
-      o_memory_wdata => o_memory_write_data,
-      i_memory_rdata => i_memory_read_data,
-      i_memory_done  => i_memory_valid);
 
   -- memory simulator
   Simulated_Memory_1 : entity work.Simulated_Memory

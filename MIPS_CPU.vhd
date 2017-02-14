@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-11
--- Last update: 2017-01-05
+-- Last update: 2017-02-15
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -28,8 +28,6 @@ use work.cache_defs.all;
 use work.instruction_defs.instr_tag_t;
 use work.instruction_prediction.prediction_t;
 
--------------------------------------------------------------------------------
-
 entity MIPS_CPU is
 
   generic (
@@ -42,9 +40,6 @@ entity MIPS_CPU is
   port (
     clk                             : in  std_logic;
     rst                             : in  std_logic;
-    -- L2 cache lines
-    o_creq                          : out cache_request_t;
-    i_cresp                         : in  cache_response_t;
     -- Temprorary Data Memory interface
     o_mem_addr                      : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
     i_mem_rd_valid                  : in  std_logic;
@@ -53,6 +48,13 @@ entity MIPS_CPU is
     o_mem_word_width                : out std_logic;
     o_mem_wr_data                   : out std_logic_vector(DATA_WIDTH - 1 downto 0);
     i_mem_wr_ack                    : in  std_logic;
+    -- outer mem interface
+    o_memory_req                    : out std_logic;
+    o_memory_we                     : out std_logic;
+    o_memory_addr                   : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
+    i_memory_rdata                  : in  std_logic_vector(DATA_WIDTH - 1 downto 0);
+    o_memory_wdata                  : out std_logic_vector(DATA_WIDTH - 1 downto 0);
+    i_memory_done                   : in  std_logic;
     -- Debug signals
     signal o_dbg_if_pc              : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
     signal o_dbg_di_pc              : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
@@ -205,8 +207,12 @@ begin  -- architecture rtl
       o_pc_instr                  => fetched_pc,
       o_instr_tag                 => di_instr_tag,
       o_mispredict_kill_pipeline  => mispredict_kills_pipeline,
-      o_creq                      => o_creq,
-      i_cresp                     => i_cresp,
+      o_l2c_req                   => o_memory_req,
+      o_l2c_we                    => o_memory_we,
+      o_l2c_addr                  => o_memory_addr,
+      i_l2c_rdata                 => i_memory_rdata,
+      o_l2c_wdata                 => o_memory_wdata,
+      i_l2c_done                  => i_memory_done,
       i_is_jump                   => wb_is_jump,
       i_jump_target               => wb_jump_target,
       i_commited_instr_tag        => commited_instr_tag,

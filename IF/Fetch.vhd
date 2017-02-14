@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-10
--- Last update: 2017-01-01
+-- Last update: 2017-02-15
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -49,8 +49,12 @@ entity Fetch is
     o_instr_tag                 : out instr_tag_t;
     o_mispredict_kill_pipeline  : out std_logic;
     -- L2 connections
-    o_creq     : out cache_request_t;
-    i_cresp    : in  cache_response_t;
+    o_l2c_req                   : out std_logic;
+    o_l2c_we                    : out std_logic;
+    o_l2c_addr                  : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
+    i_l2c_rdata                 : in  std_logic_vector(DATA_WIDTH - 1 downto 0);
+    o_l2c_wdata                 : out std_logic_vector(DATA_WIDTH - 1 downto 0);
+    i_l2c_done                  : in  std_logic;
     -- Writeback feedback signals
     i_is_jump                   : in  std_logic;
     i_jump_target               : in  std_logic_vector(ADDR_WIDTH - 1 downto 0);
@@ -119,8 +123,12 @@ begin
       o_data                   => iprovider_data,
       o_valid                  => iprovider_data_valid,
       o_do_step_pc             => iprovider_do_step_pc,
-      o_creq                   => o_creq,
-      i_cresp                  => i_cresp,
+      o_l2c_req                => o_l2c_req,
+      o_l2c_we                 => o_l2c_we,
+      o_l2c_addr               => o_l2c_addr,
+      i_l2c_rdata              => i_l2c_rdata,
+      o_l2c_wdata              => o_l2c_wdata,
+      i_l2c_done               => i_l2c_done,
       o_dbg_fetching           => dbg_iprovider_fetching,
       o_dbg_fetching_itag      => dbg_iprovider_fetching_itag);
 

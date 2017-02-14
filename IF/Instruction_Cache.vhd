@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-10
--- Last update: 2017-01-01
+-- Last update: 2017-02-15
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -25,8 +25,6 @@ use ieee.numeric_std.all;
 
 use work.cache_defs.all;
 
--------------------------------------------------------------------------------
-
 entity Instruction_Cache is
 
   generic (
@@ -35,20 +33,22 @@ entity Instruction_Cache is
     );
 
   port (
-    clk        : in  std_logic;
-    rst        : in  std_logic;
+    clk         : in  std_logic;
+    rst         : in  std_logic;
     -- stall_req       : in  std_logic;
-    addr       : in  std_logic_vector(ADDR_WIDTH - 1 downto 0);
-    data       : out std_logic_vector(DATA_WIDTH - 1 downto 0);
-    data_valid : out std_logic;
+    addr        : in  std_logic_vector(ADDR_WIDTH - 1 downto 0);
+    data        : out std_logic_vector(DATA_WIDTH - 1 downto 0);
+    data_valid  : out std_logic;
     -- L2 connections
-    o_creq     : out cache_request_t;
-    i_cresp    : in  cache_response_t
+    o_l2c_req   : out std_logic;
+    o_l2c_we    : out std_logic;
+    o_l2c_addr  : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
+    i_l2c_rdata : in  std_logic_vector(DATA_WIDTH - 1 downto 0);
+    o_l2c_wdata : out std_logic_vector(DATA_WIDTH - 1 downto 0);
+    i_l2c_done  : in  std_logic
     );
 
 end entity Instruction_Cache;
-
--------------------------------------------------------------------------------
 
 architecture rtl of Instruction_Cache is
 
@@ -58,34 +58,54 @@ architecture rtl of Instruction_Cache is
   signal i_porta_req         : std_logic;
   signal fetch_addr          : std_logic_vector(ADDR_WIDTH - 1 downto 0);
   signal fetched_instr_valid : std_logic;
+  signal first_instr         : std_ulogic;
 
 begin  -- architecture rtl
 
   -----------------------------------------------------------------------------
   -- Component instantiations
   -----------------------------------------------------------------------------
-  L1_Instr : entity work.SinglePort_Associative_Cache
+  L1_Instr : entity work.acache
     generic map (
-      WRITE_BACK => false)
+      ADDR_WIDTH       => ADDR_WIDTH,
+      DATA_WIDTH       => DATA_WIDTH,
+      DATAS_PER_LINE   => 64,
+      NB_WAYS          => 2,
+      CACHE_SIZE_BYTES => 8192,
+      LOWER_DATA_WIDTH => DATA_WIDTH,
+      WRITE_BACK       => false,
+      STATISTICS       => true,
+      DEBUG            => false)
     port map (
-      clk                      => clk,
-      rst                      => rst,
-      i_porta_req              => i_porta_req,
-      i_porta_we               => '0',
-      i_porta_do_write_through => '0',
-      i_porta_addr             => fetch_addr,
-      i_porta_write_data       => (others => 'X'),
-      o_porta_read_data        => data,
-      o_porta_valid            => fetched_instr_valid,
+      clk                => clk,
+      rst                => rst,
+      i_req              => i_porta_req,
+      i_wen              => '0',
+      i_addr             => fetch_addr,
+      i_wdata            => (others => 'X'),
+      i_do_write_through => '0',
+      o_rdata            => data,
+      o_rdata_valid      => fetched_instr_valid,
       -- Carry over
-      o_creq                   => o_creq,
-      i_cresp                  => i_cresp
-      );
+      o_memory_req       => o_l2c_req,
+      o_memory_we        => o_l2c_we,
+      o_memory_addr      => o_l2c_addr,
+      i_memory_rdata     => i_l2c_rdata,
+      i_memory_done      => i_l2c_done);
 
-  i_porta_req <= '1' when rst = '0';
+  i_porta_req <= fetched_instr_valid or first_instr;
   data_valid  <= fetched_instr_valid;
   fetch_addr  <= addr;
 
-end architecture rtl;
+  first_instructor : process(rst, clk, first_instr)
+  begin
+    if rising_edge(clk) then
+      if rst = '1' then
+        first_instr <= '1';
+      else
+        first_instr <= '0';
+      end if;
+    end if;
+  end process first_instructor;
 
--------------------------------------------------------------------------------
+end architecture rtl;

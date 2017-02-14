@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-12-03
--- Last update: 2017-01-01
+-- Last update: 2017-02-14
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -26,8 +26,6 @@ use ieee.numeric_std.all;
 use work.cpu_defs.all;
 use work.cache_defs.all;
 use work.instruction_defs.instr_tag_t;
-
--------------------------------------------------------------------------------
 
 entity Instruction_Provider is
 
@@ -57,8 +55,12 @@ entity Instruction_Provider is
     o_valid                  : out std_logic;
     o_do_step_pc             : out std_logic;
     -- L2 connections
-    o_creq                   : out cache_request_t;
-    i_cresp                  : in  cache_response_t;
+    o_l2c_req                : out std_logic;
+    o_l2c_we                 : out std_logic;
+    o_l2c_addr               : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
+    i_l2c_rdata              : in  std_logic_vector(DATA_WIDTH - 1 downto 0);
+    o_l2c_wdata              : out std_logic_vector(DATA_WIDTH - 1 downto 0);
+    i_l2c_done               : in  std_logic;
     -- Debug signal
     --- Current fetching address accessed in the instruction cache
     o_dbg_fetching           : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
@@ -66,8 +68,6 @@ entity Instruction_Provider is
     );
 
 end entity Instruction_Provider;
-
--------------------------------------------------------------------------------
 
 architecture str of Instruction_Provider is
   subtype addr_t is std_logic_vector(ADDR_WIDTH - 1 downto 0);
@@ -104,15 +104,19 @@ begin  -- architecture str
       DATA_WIDTH => DATA_WIDTH
       )
     port map (
-      clk        => clk,
-      rst        => rst,
+      clk         => clk,
+      rst         => rst,
       -- cache query and response
-      addr       => cache_query_addr,
-      data       => cache_response_data,
-      data_valid => cache_response_valid,
+      addr        => cache_query_addr,
+      data        => cache_response_data,
+      data_valid  => cache_response_valid,
       -- signal carry over L2 connections
-      o_creq     => o_creq,
-      i_cresp    => i_cresp
+      o_l2c_req   => o_l2c_req,
+      o_l2c_we    => o_l2c_we,
+      o_l2c_addr  => o_l2c_addr,
+      i_l2c_rdata => i_l2c_rdata,
+      o_l2c_wdata => o_l2c_wdata,
+      i_l2c_done  => i_l2c_done
       );
 
   --- PC handling
@@ -198,9 +202,4 @@ begin  -- architecture str
   o_dbg_fetching      <= cache_query_addr;
   o_dbg_fetching_itag <= cache_query_itag;
 
------------------------------------------------------------------------------
--- Component instantiations
------------------------------------------------------------------------------
 end architecture str;
-
--------------------------------------------------------------------------------
