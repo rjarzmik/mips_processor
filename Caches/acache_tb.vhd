@@ -1,13 +1,13 @@
 -------------------------------------------------------------------------------
--- Title      : Testbench for design "SinglePort_Associative_Cache"
--- Project    : Source files in two directories, custom library name, VHDL'87
+-- Title      : Testbench for design "acache"
+-- Project    : Cache
 -------------------------------------------------------------------------------
--- File       : SinglePort_Associative_Cache_tb.vhd
--- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
--- Company    : 
--- Created    : 2016-11-30
--- Last update: 2016-12-30
--- Platform   : 
+-- File       : acache_tb.vhd
+-- Author     : Robert Jarzmik <robert.jarzmik@free.fr>
+-- Company    :
+-- Created    : 2017-02-01
+-- Last update: 2017-02-14
+-- Platform   :
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
 -- Description:
@@ -16,11 +16,11 @@
 --   DATAS_PER_LINE = 2
 --   NB_WAY = 2
 -------------------------------------------------------------------------------
--- Copyright (c) 2016 
+-- Copyright (c) 2017
 -------------------------------------------------------------------------------
 -- Revisions  :
--- Date        Version  Author  Description
--- 2016-11-30  1.0      rj      Created
+-- Date        Version  Author                  Description
+-- 2017-02-01  1.0      robert.jarzmik@free.fr  Created
 -------------------------------------------------------------------------------
 
 library ieee;
@@ -29,40 +29,47 @@ use ieee.numeric_std.all;
 
 use work.cache_defs.all;
 
--------------------------------------------------------------------------------
+entity acache_tb is
+end entity acache_tb;
 
-entity SinglePort_Associative_Cache_tb is
-
-end entity SinglePort_Associative_Cache_tb;
-
--------------------------------------------------------------------------------
-
-architecture ways_N_associative of SinglePort_Associative_Cache_tb is
+architecture test of acache_tb is
 
   -- component generics
-  constant MEMORY_LATENCY : integer := 3;
-  constant DEBUG          : boolean := true;
+  constant ADDR_WIDTH       : positive := 32;
+  constant DATA_WIDTH       : positive := 32;
+  constant DATAS_PER_LINE   : positive := 2;
+  constant NB_WAYS          : positive := 2;
+  constant CACHE_SIZE_BYTES : positive := 32;
+  constant LOWER_DATA_WIDTH : positive := 32;
+  constant WRITE_BACK       : boolean  := true;
+  constant MEMORY_LATENCY   : integer  := 3;
+  constant DEBUG            : boolean  := true;
+
+  constant cline_refills : natural := DATAS_PER_LINE / (LOWER_DATA_WIDTH / DATA_WIDTH);
+  constant cline_flushes : natural := DATAS_PER_LINE / (LOWER_DATA_WIDTH / DATA_WIDTH);
+
+  subtype addr_t is std_logic_vector(ADDR_WIDTH - 1 downto 0);
+  subtype data_t is std_logic_vector(DATA_WIDTH - 1 downto 0);
 
   -- component ports
-  signal clk                      : std_logic                                 := '1';
-  signal clkena                   : std_logic                                 := '1';
-  signal rst                      : std_logic                                 := '1';
-  signal i_porta_req              : std_logic                                 := '0';
-  signal i_porta_we               : std_logic;
-  signal i_porta_addr             : addr_t                                    := (others => '0');
-  signal i_porta_do_write_through : std_logic;
-  signal i_porta_write_data       : std_logic_vector(DATA_WIDTH - 1 downto 0) := (others => 'X');
-  signal o_porta_read_data        : std_logic_vector(DATA_WIDTH - 1 downto 0);
-  signal o_porta_valid            : std_logic;
-
-  signal o_memory_req        : std_logic := '0';
-  signal o_memory_we         : std_logic := '0';
-  signal o_memory_addr       : addr_t;
-  signal o_memory_write_data : std_logic_vector(DATA_WIDTH - 1 downto 0);
-  signal i_memory_read_data  : std_logic_vector(DATA_WIDTH - 1 downto 0);
-  signal i_memory_valid      : std_logic;
-  signal o_dbg_state         : cache_state;
-  signal o_dbg_cstats        : cache_stats_t;
+  signal clk                : std_logic := '1';
+  signal clkena             : std_logic := '1';
+  signal rst                : std_logic := '1';
+  signal i_req              : std_logic := '0';
+  signal i_wen              : std_logic := '0';
+  signal i_addr             : addr_t;
+  signal i_wdata            : data_t;
+  signal i_do_write_through : std_logic;
+  signal o_rdata            : data_t;
+  signal o_rdata_valid      : std_logic;
+  signal o_wready           : std_logic;
+  signal o_memory_req       : std_logic;
+  signal o_memory_we        : std_logic;
+  signal o_memory_addr      : std_logic_vector(ADDR_WIDTH - 1 downto 0);
+  signal o_memory_wdata     : std_logic_vector(LOWER_DATA_WIDTH - 1 downto 0);
+  signal i_memory_rdata     : std_logic_vector(LOWER_DATA_WIDTH - 1 downto 0);
+  signal i_memory_done      : std_logic;
+  signal o_dbg_cstats       : cache_stats_t;
 
   signal porta_req        : std_logic := '0';
   signal porta_we         : std_logic;
@@ -70,12 +77,8 @@ architecture ways_N_associative of SinglePort_Associative_Cache_tb is
   signal porta_wthrough   : std_logic;
   signal porta_write_data : data_t;
 
-  signal cls_req     : cls_op;
-  signal cls_creq    : cache_request_t;
-  signal cls_cresp   : cache_response_t;
   signal test_num    : natural               := 1;
   signal test_action : unsigned(31 downto 0) := (others => 'Z');
-
   type requestor_t is record
     req                    : std_logic;
     we                     : std_logic;
@@ -103,21 +106,6 @@ architecture ways_N_associative of SinglePort_Associative_Cache_tb is
       "refills=" & integer'image(stats.refills);
   end procedure report_cache_stats;
 
-  function cache_state_name(c : cache_state) return string is
-  begin
-    case c is
-      when s_idle             => return "idle";
-      when s_searching        => return "searching";
-      when s_prepare_flushing => return "prepare_flush";
-      when s_flush_outer      => return "flush_outer";
-      when s_flushing         => return "flushing";
-      when s_refill_memory    => return "refill_memory";
-      when s_refill_cache     => return "refill_cache";
-      when s_writethrough     => return "writethrough";
-      when s_write_allocate   => return "write_allocate";
-    end case;
-  end function cache_state_name;
-
   function testname(num : natural) return string is
   begin
     case num is
@@ -131,12 +119,10 @@ architecture ways_N_associative of SinglePort_Associative_Cache_tb is
     end case;
   end function testname;
 
-  function test_report_header(num_test : natural; num_action : unsigned; clk_after_req : natural;
-                              state    : cache_state)
+  function test_report_header(num_test : natural; num_action : unsigned; clk_after_req : natural)
     return string is
   begin
     return "[" & testname(num_test) & ":" & integer'image(to_integer(num_action)) & "]" &
-      "[" & cache_state_name(state) & "]" &
       "[T.req + " & integer'image(clk_after_req) & "] ";
   end function test_report_header;
 
@@ -154,9 +140,9 @@ architecture ways_N_associative of SinglePort_Associative_Cache_tb is
   --- TOTAL                : 4 + nb_to_flush + nb_to_flush * MEMORY_LATENCY
   --
   -- Refill cycles
-  --- Refill Memory        : MEMORY_LATENCY * nb_to_refill + 3 cycles
-  --- Refill Cache         : nb_to_refill + 1
-  --- TOTAL                : 4 + nb_to_refill + nb_to_refill * MEMORY_LATENCY
+  --- Refill Memory        : MEMORY_LATENCY * nb_to_refill + 5 cycles
+  --- Refill Cache         : nb_to_refill + 2
+  --- TOTAL                : 7 + nb_to_refill * MEMORY_LATENCY
 
   -- Write Allocate cycles : 1 cycle
 
@@ -165,7 +151,9 @@ architecture ways_N_associative of SinglePort_Associative_Cache_tb is
 
   function estimate_latency(lk : latency_kind; nb_refill : natural; nb_flush : natural)
     return natural is
-    variable lat : natural := 0;
+    variable lat                  : natural := 0;
+    constant refill_const_penalty : natural := 8;
+    constant flush_const_penalty  : natural := 6;
   begin
     lat := lat + 1;                     -- searched
     case lk is
@@ -173,24 +161,25 @@ architecture ways_N_associative of SinglePort_Associative_Cache_tb is
       when write_hit =>
         lat := lat + 1;                 -- write allocate
       when read_miss =>
-        lat := lat + 4 + nb_refill + nb_refill * MEMORY_LATENCY;  -- refill
+        lat := lat + refill_const_penalty + nb_refill * MEMORY_LATENCY;  -- refill
         if nb_flush > 0 then
-          lat := lat + 4 + nb_flush + nb_flush * MEMORY_LATENCY;  -- flush
+          lat := lat + flush_const_penalty + nb_flush * MEMORY_LATENCY;  -- flush
         end if;
       when write_miss =>
+        lat := lat + refill_const_penalty + nb_refill * MEMORY_LATENCY;  -- refill
         if nb_flush > 0 then
-          lat := lat + 4 + nb_flush + nb_flush * MEMORY_LATENCY;  -- flush
+          lat := lat + flush_const_penalty + nb_flush * MEMORY_LATENCY;  -- flush
         end if;
-        lat := lat + 1;                 -- write allocate
+      -- lat := lat + 1;                 -- write allocate
       when write_hit_through =>
         lat := lat + 1;                 -- write allocate
-        lat := lat + 1 + 1 + 1 * MEMORY_LATENCY;  -- write through
+        lat := lat + 2 + 1 * MEMORY_LATENCY;  -- write through
       when write_miss_through =>
+        lat := lat + refill_const_penalty + nb_refill * MEMORY_LATENCY;  -- refill
         if nb_flush > 0 then
-          lat := lat + 4 + nb_flush + nb_flush * MEMORY_LATENCY;  -- flush
+          lat := lat + flush_const_penalty + nb_flush * MEMORY_LATENCY;  -- flush
         end if;
-        lat := lat + 1;                 -- write allocate
-        lat := lat + 1 + 1 + 1 * MEMORY_LATENCY;  -- write through
+        lat := lat + 2 + 1 * MEMORY_LATENCY;  -- write through
     end case;
     return lat;
   end function estimate_latency;
@@ -227,102 +216,128 @@ architecture ways_N_associative of SinglePort_Associative_Cache_tb is
     end if;
   end procedure request_write;
 
-begin  -- architecture ways_N_associative
+begin  -- architecture test
 
   -- component instantiation
-  DUT : entity work.SinglePort_Associative_Cache(rtl)
-    generic map (DEBUG => DEBUG)
+  DUT : entity work.acache
+    generic map (ADDR_WIDTH       => ADDR_WIDTH,
+                 DATA_WIDTH       => DATA_WIDTH,
+                 DATAS_PER_LINE   => DATAS_PER_LINE,
+                 NB_WAYS          => NB_WAYS,
+                 CACHE_SIZE_BYTES => CACHE_SIZE_BYTES,
+                 LOWER_DATA_WIDTH => LOWER_DATA_WIDTH,
+                 WRITE_BACK       => WRITE_BACK,
+                 DEBUG            => DEBUG)
     port map (
-      clk                      => clk,
-      rst                      => rst,
-      i_porta_req              => i_porta_req,
-      i_porta_we               => i_porta_we,
-      i_porta_addr             => i_porta_addr,
-      i_porta_do_write_through => i_porta_do_write_through,
-      i_porta_write_data       => i_porta_write_data,
-      o_porta_read_data        => o_porta_read_data,
-      o_porta_valid            => o_porta_valid,
-      -- Carry-over signals
-      o_creq                   => cls_creq,
-      i_cresp                  => cls_cresp,
-      -- Debug
-      o_dbg_state              => o_dbg_state,
-      o_dbg_cstats             => o_dbg_cstats);
+      clk                => clk,
+      rst                => rst,
+      i_req              => i_req,
+      i_wen              => i_wen,
+      i_addr             => i_addr,
+      i_wdata            => i_wdata,
+      i_do_write_through => i_do_write_through,
+      o_rdata            => o_rdata,
+      o_rdata_valid      => o_rdata_valid,
+      o_wready           => o_wready,
+      o_memory_req       => o_memory_req,
+      o_memory_we        => o_memory_we,
+      o_memory_addr      => o_memory_addr,
+      o_memory_wdata     => o_memory_wdata,
+      i_memory_rdata     => i_memory_rdata,
+      i_memory_done      => i_memory_done,
+      o_dbg_cstats       => o_dbg_cstats);
 
   -- reset
   rst <= '0'                  after 12 ps;
   -- clock generation
   clk <= (clkena and not clk) after 5 ps;
 
-  requestor_handler : process(clk, requestor, o_porta_valid, o_porta_read_data)
-    variable queried_addr    : addr_t;
-    variable queried_we      : std_ulogic;
-    variable expecting_valid : integer := -1;
-    variable expecting_data  : data_t;
-    variable clk_after_req   : integer := -1;
+  requestor_handler : process(clk, requestor, o_rdata_valid, o_rdata, o_wready)
+    variable queried_addr            : addr_t;
+    variable queried_we              : std_ulogic;
+    variable expecting_valid         : integer := -1;
+    variable expecting_valid_latency : integer := -1;
+    variable expecting_data          : data_t;
+    variable clk_after_req           : integer := -1;
   begin
+    if rising_edge(clk) and clk_after_req >= -1 then
+      clk_after_req := clk_after_req + 1;
+    end if;
+
+    if rising_edge(clk) and expecting_valid > 0 then
+      expecting_valid := expecting_valid - 1;
+    end if;
+
     if falling_edge(clk) then
-      if clk_after_req >= 0 then
-        clk_after_req := clk_after_req + 1;
-      end if;
-      if expecting_valid > 0 then
-        expecting_valid := expecting_valid - 1;
-      end if;
+
+      --report "RJK: T+" & integer'image(clk_after_req) &
+      --  " expecting_valid=" & integer'image(expecting_valid) &
+      --  " requestor.req = " & std_logic'image(requestor.req);
 
       if clk_after_req > 0 and expecting_valid >= 0 then
-        if o_porta_valid = '1' and expecting_valid > 0 then
-          report test_report_header(test_num, test_action, clk_after_req, o_dbg_state) &
-            "Unexpected cache response too early, remaining " &
+        if queried_we = '0' and o_rdata_valid = '1' and expecting_valid > 0 then
+          report test_report_header(test_num, test_action, clk_after_req) &
+            "Unexpected cache read response too early, remaining " &
             integer'image(expecting_valid) & " cycles, " &
             integer'image(clk_after_req) & " cycles after request" severity error;
         end if;
 
-        if o_porta_valid = '1' and expecting_valid = 0 then
-          if queried_we = '0' then
-            if expecting_data = o_porta_read_data then
-              report test_report_header(test_num, test_action, clk_after_req, o_dbg_state) &
-                "Cache responded as expected @" & to_hstring(queried_addr) &
-                " => " & to_hstring(expecting_data) severity note;
-              clk_after_req := -1;
-            else
-              report test_report_header(test_num, test_action, clk_after_req, o_dbg_state) &
-                "Cache responded wrong data in expected cycle @" & to_hstring(queried_addr) &
-                " => " & to_hstring(o_porta_read_data) & " while expecting " &
-                to_hstring(expecting_data) severity error;
-            end if;
-            clk_after_req := -1;
-          end if;
-
-          if queried_we = '1' then
-            report test_report_header(test_num, test_action, clk_after_req, o_dbg_state) &
-              "Cache accepted write as expected @" & to_hstring(queried_addr) &
-              " <= " & to_hstring(porta_write_data) severity note;
-            clk_after_req := -1;
-          end if;
+        if queried_we = '1' and o_wready = '1' and expecting_valid > 0 then
+          report test_report_header(test_num, test_action, clk_after_req) &
+            "Unexpected write read response too early, remaining " &
+            integer'image(expecting_valid) & " cycles, " &
+            integer'image(clk_after_req) & " cycles after request" severity error;
         end if;
 
-        if o_porta_valid = '0' and expecting_valid = 0 then
-          report test_report_header(test_num, test_action, clk_after_req, o_dbg_state) &
-            "Cache didn't respond in time @" severity error;
-          clk_after_req := -1;
+        if queried_we = '0' and o_rdata_valid = '1' and expecting_valid = 0 then
+          if expecting_data = o_rdata then
+            report test_report_header(test_num, test_action - 1, clk_after_req) &
+              "Cache responded as expected @" & to_hstring(queried_addr) &
+              " => " & to_hstring(expecting_data) severity note;
+            clk_after_req := -2;
+          else
+            report test_report_header(test_num, test_action - 1, clk_after_req) &
+              "Cache responded wrong data in expected cycle @" & to_hstring(queried_addr) &
+              " => " & to_hstring(o_rdata) & " while expecting " &
+              to_hstring(expecting_data) severity error;
+          end if;
+          clk_after_req := -2;
+        end if;
+
+        if queried_we = '1' and o_wready = '1' and expecting_valid = 0 then
+          report test_report_header(test_num, test_action - 1, clk_after_req) &
+            "Cache accepted write as expected @" & to_hstring(queried_addr) &
+            " <= " & to_hstring(porta_write_data) severity note;
+          clk_after_req := -2;
+        end if;
+
+        if ((queried_we = '0' and o_rdata_valid = '0') or
+            (queried_we = '1' and o_wready = '0')) and expecting_valid = 0 then
+          report test_report_header(test_num, test_action - 1, clk_after_req) &
+            "Cache didn't respond in time @" & to_hstring(queried_addr) &
+            ", had to be in " &
+            integer'image(expecting_valid_latency) &
+            " cycles" severity error;
+          clk_after_req := -2;
         end if;
       end if;
 
       if requestor.req = '1' then
-        clk_after_req    := 0;
-        queried_addr     := requestor.addr;
-        queried_we       := requestor.we;
-        expecting_valid  := to_integer(requestor.expected_valid_latency);
-        expecting_data   := requestor.expected_data;
-        porta_req        <= '1';
-        porta_addr       <= requestor.addr;
+        clk_after_req           := 0;
+        queried_addr            := requestor.addr;
+        queried_we              := requestor.we;
+        expecting_valid         := to_integer(requestor.expected_valid_latency);
+        expecting_valid_latency := expecting_valid;
+        expecting_data          := requestor.expected_data;
+        porta_req               <= '1';
+        porta_addr              <= requestor.addr;
         porta_we         <= requestor.we;
         porta_write_data <= requestor.data;
         porta_wthrough   <= requestor.wthrough;
       end if;
 
       if requestor.req = '1' then
-      elsif clk_after_req > 0 then
+      elsif clk_after_req >= 0 then
         porta_req <= '0';
       else
         porta_req <= '0';
@@ -350,19 +365,19 @@ begin  -- architecture ways_N_associative
         test_action   <= to_unsigned(next_action, test_action'length);
         case next_action is
           when 1 =>
-            action_latency := estimate_latency(read_miss, 1, 0);
+            action_latency := estimate_latency(read_miss, cline_refills, 0);
             request_read(16#0004#, action_latency, 16#0104#, requestor);
           when 2 =>
-            action_latency := estimate_latency(read_miss, 1, 0);
+            action_latency := estimate_latency(read_miss, cline_refills, 0);
             request_read(16#0008#, action_latency, 16#0108#, requestor);
           when 3 =>
-            action_latency := estimate_latency(read_miss, 1, 0);
+            action_latency := estimate_latency(read_hit, cline_refills, 0);
             request_read(16#000c#, action_latency, 16#010c#, requestor);
           when 4 =>
-            action_latency := estimate_latency(read_miss, 1, 0);
+            action_latency := estimate_latency(read_miss, cline_refills, 0);
             request_read(16#0010#, action_latency, 16#0110#, requestor);
           when 5 =>
-            action_latency := estimate_latency(read_miss, 1, 0);
+            action_latency := estimate_latency(read_hit, cline_refills, 0);
             request_read(16#0014#, action_latency, 16#0114#, requestor);
           when 6 =>
             action_latency := estimate_latency(read_hit, 0, 0);
@@ -412,16 +427,16 @@ begin  -- architecture ways_N_associative
         test_action   <= to_unsigned(next_action, test_action'length);
         case next_action is
           when 1 =>
-            action_latency := estimate_latency(read_miss, 1, 0);
+            action_latency := estimate_latency(read_miss, cline_refills, 0);
             request_read(16#0024#, action_latency, 16#0124#, requestor);
           when 2 =>
-            action_latency := estimate_latency(read_miss, 1, 0);
+            action_latency := estimate_latency(read_miss, cline_refills, 0);
             request_read(16#0034#, action_latency, 16#0134#, requestor);
           when 3 =>
-            action_latency := estimate_latency(read_miss, 1, 0);
+            action_latency := estimate_latency(read_miss, cline_refills, 0);
             request_read(16#0044#, action_latency, 16#0144#, requestor);
           when 4 =>
-            action_latency := estimate_latency(read_miss, 1, 0);
+            action_latency := estimate_latency(read_miss, cline_refills, 0);
             request_read(16#0024#, action_latency, 16#0124#, requestor);
           when 5 =>
             -- Way should still contain this data, as previous flushed @0034
@@ -474,16 +489,17 @@ begin  -- architecture ways_N_associative
         test_action   <= to_unsigned(next_action, test_action'length);
         case next_action is
           when 1 =>
-            action_latency := estimate_latency(write_hit, 0, 0);
+            action_latency := estimate_latency(write_miss, cline_refills, 0);
             request_write(16#0004#, 16#0204#, action_latency, false, requestor);
           when 2 =>
-            action_latency := estimate_latency(write_hit, 0, 0);
+            -- read_nominal_test:2 has filled this entry which is still valid
+            action_latency := estimate_latency(write_hit, cline_refills, 0);
             request_write(16#0008#, 16#0208#, action_latency, false, requestor);
           when 3 =>
             action_latency := estimate_latency(write_hit, 0, 0);
             request_write(16#000c#, 16#020c#, action_latency, false, requestor);
           when 4 =>
-            action_latency := estimate_latency(write_hit, 0, 0);
+            action_latency := estimate_latency(write_miss, cline_refills, 0);
             request_write(16#0010#, 16#0210#, action_latency, false, requestor);
           when 5 =>
             action_latency := estimate_latency(write_hit, 0, 0);
@@ -536,19 +552,19 @@ begin  -- architecture ways_N_associative
         case next_action is
           when 1 =>
             -- Way will be flushed as there is 1 dirty data in it
-            action_latency := estimate_latency(write_miss, 0, 1);
+            action_latency := estimate_latency(write_miss, cline_refills, cline_flushes);
             request_write(16#0024#, 16#0224#, action_latency, false, requestor);
           when 2 =>
             -- Way will be flushed as there are 2 dirty data in it
-            action_latency := estimate_latency(write_miss, 0, 2);
+            action_latency := estimate_latency(write_miss, cline_refills, cline_flushes);
             request_write(16#0034#, 16#0234#, action_latency, false, requestor);
           when 3 =>
             -- Way will be flushed as there are dirty data in them
-            action_latency := estimate_latency(write_miss, 0, 1);
+            action_latency := estimate_latency(write_miss, cline_refills, cline_flushes);
             request_write(16#0044#, 16#0244#, action_latency, false, requestor);
           when 4 =>
             -- Way will be flushed as there are dirty data in them
-            action_latency := estimate_latency(write_miss, 0, 1);
+            action_latency := estimate_latency(write_miss, cline_refills, cline_flushes);
             request_write(16#0024#, 16#0224#, action_latency, false, requestor);
           when 5 =>
             -- Way should still contain this data, and a write hit should occur
@@ -610,7 +626,7 @@ begin  -- architecture ways_N_associative
             action_latency := estimate_latency(write_hit, 0, 0);
             request_write(16#0024#, 16#0324#, action_latency, false, requestor);
           when 3 =>
-            action_latency := estimate_latency(write_miss, 0, 1);
+            action_latency := estimate_latency(write_miss, cline_refills, cline_flushes);
             request_write(16#0034#, 16#0334#, action_latency, false, requestor);
           when 4 =>
             action_latency := estimate_latency(read_hit, 0, 0);
@@ -620,7 +636,7 @@ begin  -- architecture ways_N_associative
             request_read(16#0034#, action_latency, 16#0334#, requestor);
           when 6 =>
             -- Flush 0020, 0024, refill 0044
-            action_latency := estimate_latency(read_miss, 1, 2);
+            action_latency := estimate_latency(read_miss, cline_refills, cline_flushes);
             request_read(16#0044#, action_latency, 16#0244#, requestor);
           when 7 =>
             action_latency := estimate_latency(write_hit, 0, 0);
@@ -693,26 +709,36 @@ begin  -- architecture ways_N_associative
           when 6 =>
             action_latency := estimate_latency(read_hit, 0, 0);
             request_read(16#0034#, action_latency, 16#0434#, requestor);
-          --
-          -- From there, writethrough 034 should make this line non dirty
-          --
           when 7 =>
             action_latency := estimate_latency(write_hit_through, 0, 0);
             request_write(16#0034#, 16#0434#, action_latency, true, requestor);
           when 8 =>
-            -- Previous writethrough should remove the need for flushing (0034)
-            action_latency := estimate_latency(read_miss, 1, 0);
+            -- Previous writethrough didn't remove the need for flushing (0034)
+            action_latency := estimate_latency(read_miss, cline_refills, cline_flushes);
             request_read(16#0004#, action_latency, 16#0204#, requestor);
           when 9 =>
             -- As 0040 should still be dirty, there is a flush + refill (0040)
-            action_latency := estimate_latency(read_miss, 1, 1);
+            action_latency := estimate_latency(read_miss, cline_refills, cline_flushes);
             request_read(16#0014#, action_latency, 16#0214#, requestor);
           when 10 =>
-            action_latency := estimate_latency(write_hit, 1, 1);
+            action_latency := estimate_latency(write_hit, 0, 0);
             request_write(16#0000#, 16#0400#, action_latency, false, requestor);
           when 11 =>
-            action_latency := estimate_latency(write_miss_through, 1, 1);
+            action_latency := estimate_latency(write_miss_through, cline_refills, cline_flushes);
             request_write(16#0040#, 16#0440#, action_latency, true, requestor);
+
+          when 12 =>
+            action_latency := estimate_latency(write_miss, cline_refills, 0);
+            request_write(16#0050#, 16#0550#, action_latency, false, requestor);
+          when 13 =>
+            action_latency := estimate_latency(write_hit, 0, 0);
+            request_write(16#0050#, 16#0550#, action_latency, false, requestor);
+          when 14 =>
+            action_latency := estimate_latency(write_hit, 0, 0);
+            request_write(16#0050#, 16#0550#, action_latency, false, requestor);
+          when 15 =>
+            action_latency := estimate_latency(write_hit_through, 0, 0);
+            request_write(16#0054#, 16#0554#, action_latency, true, requestor);
           when others =>
             requestor.req <= '0';
         end case;
@@ -735,7 +761,7 @@ begin  -- architecture ways_N_associative
     end if;
   end process writethrough_and_reread;
 
-  reporter : process(clk, rst, i_porta_req, i_porta_addr, o_porta_valid, o_porta_read_data)
+  reporter : process(clk, rst, i_req, i_wen, i_addr, i_wdata, o_rdata_valid, o_rdata)
     variable nb_clk        : natural := 0;
     constant clk_after_req : integer := 0;
   begin
@@ -749,16 +775,16 @@ begin  -- architecture ways_N_associative
       elsif nb_clk = 200 then
         test_num <= 3;
         report_cache_stats(o_dbg_cstats);
-      elsif nb_clk = 300 then
+      elsif nb_clk = 400 then
         test_num <= 4;
         report_cache_stats(o_dbg_cstats);
-      elsif nb_clk = 400 then
+      elsif nb_clk = 600 then
         test_num <= 5;
         report_cache_stats(o_dbg_cstats);
-      elsif nb_clk = 500 then
+      elsif nb_clk = 800 then
         test_num <= 6;
         report_cache_stats(o_dbg_cstats);
-      elsif nb_clk > 600 then
+      elsif nb_clk > 1000 then
         test_num <= 7;
         report_cache_stats(o_dbg_cstats);
       end if;
@@ -768,47 +794,31 @@ begin  -- architecture ways_N_associative
         clkena <= '0';
         report "Ending simulation";
       end if;
+    end if;
 
-      if rst = '0' and rising_edge(clk) then
-        if i_porta_req = '1' and i_porta_we = '0' then
-          report test_report_header(test_num, test_action, clk_after_req, o_dbg_state) &
-            "[" & cache_state_name(o_dbg_state) &
-            "] read request @" & to_hstring(i_porta_addr);
-        end if;
+    if rising_edge(i_req) and i_wen = '0' then
+      report test_report_header(test_num, test_action, clk_after_req) &
+        "read request @" & to_hstring(i_addr);
+    end if;
 
-        if i_porta_req = '1' and i_porta_we = '1' then
-          report test_report_header(test_num, test_action, clk_after_req, o_dbg_state) &
-            "[" & cache_state_name(o_dbg_state) &
-            "] write request @" & to_hstring(i_porta_addr) & "<= " &
-            to_hstring(i_porta_write_data);
-        end if;
+    if rising_edge(i_req) and i_wen = '1' then
+      if i_do_write_through = '0' then
+        report test_report_header(test_num, test_action, clk_after_req) &
+          "write request @" & to_hstring(i_addr) & "<= " &
+          to_hstring(i_wdata);
+      else
+        report test_report_header(test_num, test_action, clk_after_req) &
+          "writethrough request @" & to_hstring(i_addr) & "<= " &
+          to_hstring(i_wdata);
       end if;
     end if;
   end process reporter;
-
-  cls : entity work.cache_line_streamer
-    generic map (
-      ADDR_WIDTH           => ADDR_WIDTH,
-      DATA_WIDTH           => DATA_WIDTH,
-      DATAS_PER_LINE_WIDTH => DATAS_PER_LINE_WIDTH)
-    port map (
-      clk     => clk,
-      rst     => rst,
-      i_creq  => cls_creq,
-      o_cresp => cls_cresp,
-
-      o_memory_req   => o_memory_req,
-      o_memory_we    => o_memory_we,
-      o_memory_addr  => o_memory_addr,
-      o_memory_wdata => o_memory_write_data,
-      i_memory_rdata => i_memory_read_data,
-      i_memory_done  => i_memory_valid);
 
   -- memory simulator
   Simulated_Memory_1 : entity work.Simulated_Memory
     generic map (
       ADDR_WIDTH        => ADDR_WIDTH,
-      DATA_WIDTH        => DATA_WIDTH,
+      DATA_WIDTH        => LOWER_DATA_WIDTH,
       MEMORY_ADDR_WIDTH => 16,
       MEMORY_LATENCY    => MEMORY_LATENCY,
       DEBUG             => DEBUG)
@@ -818,25 +828,18 @@ begin  -- architecture ways_N_associative
       i_memory_req        => o_memory_req,
       i_memory_we         => o_memory_we,
       i_memory_addr       => o_memory_addr,
-      i_memory_write_data => o_memory_write_data,
-      o_memory_read_data  => i_memory_read_data,
-      o_memory_valid      => i_memory_valid);
+      i_memory_write_data => o_memory_wdata,
+      o_memory_read_data  => i_memory_rdata,
+      o_memory_valid      => i_memory_done);
 
-  i_porta_req              <= porta_req;
-  i_porta_we               <= porta_we;
-  i_porta_addr             <= porta_addr;
-  i_porta_do_write_through <= porta_wthrough;
-  i_porta_write_data       <= porta_write_data;
+  i_req              <= porta_req;
+  i_wen              <= porta_we;
+  i_addr             <= porta_addr;
+  i_do_write_through <= porta_wthrough;
+  i_wdata            <= porta_write_data;
+end architecture test;
 
-
-end architecture ways_N_associative;
-
--------------------------------------------------------------------------------
-
-configuration SinglePort_Associative_Cache_tb_ways_N_associative_cfg of SinglePort_Associative_Cache_tb is
-  for ways_N_associative
+configuration acache_tb_test_cfg of acache_tb is
+  for test
   end for;
-end SinglePort_Associative_Cache_tb_ways_N_associative_cfg;
-
--------------------------------------------------------------------------------
-
+end acache_tb_test_cfg;

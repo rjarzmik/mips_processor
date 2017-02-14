@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-12-15
--- Last update: 2017-01-01
+-- Last update: 2017-02-13
 -- Platform   : 
 -- Standard   : VHDL'08
 -------------------------------------------------------------------------------
@@ -24,93 +24,27 @@ use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 use ieee.math_real.all;
 
--------------------------------------------------------------------------------
+library rjarzmik;
+use rjarzmik.slv_utils.slv_is_x;
+use work.cache_sizing.csizes;
 
 package cache_defs is
-  -- Constants for Singleport_Associative_Cache_tb
-  constant ADDR_WIDTH           : natural := 32;
-  constant DATA_WIDTH           : natural := 32;
-  constant DATAS_PER_LINE_WIDTH : natural := 1;
-  constant INDEX_WIDTH          : natural := 1;
-  constant WAYS_WIDTH           : natural := 1;
-
-  --constant ADDR_WIDTH           : natural := 32;
-  --constant DATA_WIDTH           : natural := 32;
-  --constant DATAS_PER_LINE_WIDTH : natural := 4;
-  --constant INDEX_WIDTH          : natural := 7;
-  --constant WAYS_WIDTH           : natural := 2;
-
-  -- Infered constants
-  constant NB_LINES             : natural := 2**INDEX_WIDTH;
-  constant DATAS_PER_LINE       : natural := 2**DATAS_PER_LINE_WIDTH;
-  constant NB_WAYS              : natural := 2**WAYS_WIDTH;
-
-  constant ADDR_DATA_NBITS     : natural := integer(log2(real(DATA_WIDTH / 8)));
-  constant ADDR_DATALINE_NBITS : natural :=
-    ADDR_DATA_NBITS + DATAS_PER_LINE_WIDTH + INDEX_WIDTH;
-  constant TAG_WIDTH : natural := ADDR_WIDTH - ADDR_DATALINE_NBITS;
-
-  subtype addr_t is std_logic_vector(ADDR_WIDTH - 1 downto 0);
-  subtype data_t is std_logic_vector(DATA_WIDTH - 1 downto 0);
-
-  type data_vector is array(natural range <>) of data_t;
-
-  subtype cache_line_selector_t is std_logic_vector(0 to DATAS_PER_LINE - 1);
-  subtype way_selector_t is std_logic_vector(0 to NB_WAYS - 1);
-
-  subtype cache_line_t is data_vector(0 to DATAS_PER_LINE - 1);
-  subtype flat_cache_line_t is
-    std_logic_vector(DATAS_PER_LINE * DATA_WIDTH - 1 downto 0);
-
-  type cache_line_vector is array (natural range <>) of cache_line_t;
-  type flat_cache_line_vector is array (natural range <>) of flat_cache_line_t;
-
-  type cls_op is (cls_none, cls_refill, cls_flush);
-  type cache_request_t is record
-    req   : cls_op;
-    addr  : addr_t;
-    sel   : cache_line_selector_t;
-    cline : cache_line_t;
-  end record;
-
-  type cache_response_t is record
-    cline : cache_line_t;
-    sel   : cache_line_selector_t;
-    rdy   : std_logic;
-    done  : std_logic;
-  end record;
-
   -- Tag entry
-  --- entry = [ [valid_bits_of_line] [dirty_bits_of_line] [tag_context] [tag]
-  --- +-------------------------------------------------------+
-  --- | Tag context | Dirty line bits | Valid line bits | Tag |
-  --- +-------------------------------------------------------+
-  subtype tag_t is std_logic_vector(TAG_WIDTH - 1 downto 0);
-  subtype tag_context_t is std_logic_vector(1 downto 0);
-  type tag_entry_t is record
-    ctxt   : tag_context_t;
-    valids : cache_line_selector_t;
-    dirtys : cache_line_selector_t;
-    tag    : tag_t;
-  end record;
-  type tag_entry_vector is array(natural range <>) of tag_entry_t;
-  constant TAG_ENTRY_EMPTY : tag_entry_t := (
-    (others => '0'), (others => '0'), (others => '0'), (others => '0'));
+  --- +-----------------------------------------------------+
+  --- | Tag context | Dirty line bit | Valid line bit | Tag |
+  --- +-----------------------------------------------------+
+  function get_tag(tag_slv : std_logic_vector; constant cs : csizes)
+    return std_logic_vector;
 
-  -- Eviction types
-  --- eviction_entry = [ [alloc_counter] ]
-  constant alloc_entry_len : natural := ((WAYS_WIDTH * NB_WAYS + 7) / 8) * 8;
-  subtype alloc_entry_t is std_logic_vector(0 to alloc_entry_len - 1);
+  function get_tag_valid(tag_slv : std_logic_vector; constant cs : csizes)
+    return std_logic;
 
-  type mem_tag_status_t is record
-    valid : std_logic;
-    dirty : std_logic;
-  end record;
+  function get_tag_dirty(tag_slv : std_logic_vector; constant cs : csizes)
+    return std_logic;
 
-  type cache_state is (s_idle, s_searching,
-                       s_prepare_flushing, s_flush_outer, s_flushing,
-                       s_refill_memory, s_refill_cache,
-                       s_writethrough, s_write_allocate);
+  function to_tag_slv(tag   : std_logic_vector; valid : std_logic;
+                      dirty : std_logic; ctxt : std_logic_vector)
+    return std_logic_vector;
 
   -- Cache statistics
   type cache_stats_t is record
@@ -124,88 +58,78 @@ package cache_defs is
     refills        : natural;
   end record cache_stats_t;
 
-  function get_address_index(i_address : std_logic_vector) return natural;
+  function get_address_index(i_address : std_logic_vector; cs : csizes) return natural;
 
-  function get_address_tag(i_address : std_logic_vector)
+  function get_address_tag(i_address : std_logic_vector; cs : csizes)
     return std_logic_vector;
 
-  function get_data_set_index(i_address : std_logic_vector)
+  function get_data_set_index(i_address : std_logic_vector; cs : csizes)
     return natural;
 
-  function get_address(tag          : tag_t; index : natural range 0 to NB_LINES - 1;
-                       data_in_line : natural range 0 to DATAS_PER_LINE - 1)
-    return addr_t;
+  function get_address(tag          : std_logic_vector;
+                       index        : natural;
+                       data_in_line : natural;
+                       cs           : csizes)
+    return std_logic_vector;
 
-  function data_is_valid(addr : addr_t; te : tag_entry_t) return std_logic;
+  function to_way_selector(way : natural; cs : csizes)
+    return std_logic_vector;
 
-  function dataline_is_dirty(te : tag_entry_t) return boolean;
-
-  function to_way_selector(way : natural range 0 to NB_WAYS - 1)
-    return way_selector_t;
-
-  function to_cacheline_selector(addr : addr_t) return cache_line_selector_t;
+  function to_way(wsel : std_logic_vector) return natural;
 
 end package cache_defs;
 
 package body cache_defs is
 
-  function get_address_index(i_address : std_logic_vector) return natural is
+  function get_address_index(i_address : std_logic_vector; cs : csizes) return natural is
     variable idx : natural;
   begin
-    idx := to_integer(unsigned(i_address(
-      ADDR_DATALINE_NBITS - 1 downto DATAS_PER_LINE_WIDTH + ADDR_DATA_NBITS)));
+    if not slv_is_x(i_address) then
+      idx := to_integer(unsigned(i_address(
+        cs.addr_dataline_nbits + cs.index_width - 1 downto cs.addr_dataline_nbits)));
+    else
+      idx := 0;
+    end if;
     return idx;
   end function get_address_index;
 
-  function get_address_tag(i_address : std_logic_vector)
+  function get_address_tag(i_address : std_logic_vector; cs : csizes)
     return std_logic_vector is
-    variable tag : tag_t;
+    variable tag : std_logic_vector(cs.tag_width - 1 downto 0);
   begin
     tag :=
-      i_address(i_address'length - 1 downto i_address'length - TAG_WIDTH);
+      i_address(i_address'length - 1 downto i_address'length - cs.tag_width);
     return tag;
   end function get_address_tag;
 
-  function get_data_set_index(i_address : std_logic_vector)
+  function get_data_set_index(i_address : std_logic_vector; cs : csizes)
     return natural is
-    variable set_index : natural range 0 to DATAS_PER_LINE - 1;
+    variable set_index : natural range 0 to cs.datas_per_line - 1;
   begin
-    if DATAS_PER_LINE = 1 then
+    if cs.datas_per_line = 1 then
       set_index := 0;
     else
       set_index := to_integer(unsigned(i_address(
-        DATAS_PER_LINE_WIDTH + ADDR_DATA_NBITS - 1 downto ADDR_DATA_NBITS)));
+        cs.datas_per_line_width + cs.addr_data_nbits - 1 downto
+        cs.addr_data_nbits)));
     end if;
     return set_index;
   end function get_data_set_index;
 
-  function get_address(tag          : tag_t; index : natural range 0 to NB_LINES - 1;
-                       data_in_line : natural range 0 to DATAS_PER_LINE - 1)
-    return addr_t is
+  function get_address(tag          : std_logic_vector;
+                       index        : natural;
+                       data_in_line : natural;
+                       cs           : csizes)
+    return std_logic_vector is
   begin
-    return tag & std_logic_vector(to_unsigned(index, INDEX_WIDTH) &
-                                  to_unsigned(data_in_line, DATAS_PER_LINE_WIDTH) &
-                                  to_unsigned(0, ADDR_DATA_NBITS));
+    return tag & std_logic_vector(to_unsigned(index, cs.index_width) &
+                                  to_unsigned(data_in_line, cs.datas_per_line_width) &
+                                  to_unsigned(0, cs.addr_data_nbits));
   end function get_address;
 
-  function data_is_valid(addr : addr_t; te : tag_entry_t) return std_logic is
-    variable data_in_line : natural range 0 to DATAS_PER_LINE - 1;
-  begin
-    data_in_line := get_data_set_index(addr);
-    return te.valids(data_in_line);
-  end function data_is_valid;
-
-  function dataline_is_dirty(te : tag_entry_t) return boolean is
-    constant z : cache_line_selector_t := (others => '0');
-    variable o : boolean;
-  begin
-    o := te.dirtys /= z;
-    return o;
-  end function dataline_is_dirty;
-
-  function to_way_selector(way : natural range 0 to NB_WAYS - 1)
-    return way_selector_t is
-    variable ws : way_selector_t := (others => '0');
+  function to_way_selector(way : natural; cs : csizes)
+    return std_logic_vector is
+    variable ws : std_logic_vector(0 to cs.nb_ways - 1) := (others => '0');
   begin
     for i in ws'range loop
       if i = way then
@@ -215,14 +139,110 @@ package body cache_defs is
     return ws;
   end function to_way_selector;
 
-  function to_cacheline_selector(addr : addr_t) return cache_line_selector_t is
-    variable clsel        : cache_line_selector_t := (others => '0');
-    variable data_in_line : natural range 0 to DATAS_PER_LINE - 1;
+  function compute_way_bit(wsel : std_logic_vector; idx : natural)
+    return std_ulogic is
+    variable i, j : natural;
+    variable abit : std_ulogic := '0';
   begin
-    data_in_line        := get_data_set_index(addr);
-    clsel(data_in_line) := '1';
-    return clsel;
-  end function to_cacheline_selector;
+    i := 2**idx;
+    while i < wsel'length loop
+      for j in i to i + 2**idx - 1 loop
+        abit := abit or wsel(j);
+      end loop;
+      i := i + 2**(2**idx);
+    end loop;
+    return abit;
+  end function compute_way_bit;
+
+  function compute_way(wsel : std_logic_vector) return std_logic_vector is
+    constant olen : natural := integer(log2(real(wsel'length)));
+    variable way  : std_logic_vector(olen - 1 downto 0);
+  begin
+    for i in way'range loop
+      way(i) := compute_way_bit(wsel, i);
+    end loop;
+    return way;
+  end function compute_way;
+
+  function do_to_way(wsel : std_logic_vector)
+    return natural is
+    variable way   : natural;
+    variable hlen  : natural;
+    variable hzero : std_logic_vector(0 to wsel'length / 2 - 1);
+    variable vlow  : std_logic_vector(0 to wsel'length / 2 - 1);
+    variable vhigh : std_logic_vector(0 to wsel'length / 2 - 1);
+  begin
+    way := 0;
+    if wsel'length = 2 then
+      if wsel(0) = '1' then
+        return 0;
+      else
+        return 1;
+      end if;
+    else
+      hzero := (others => '0');
+      hlen  := wsel'length / 2;
+      vlow  := wsel(0 to hlen - 1);
+      vhigh := wsel(hlen to wsel'length - 1);
+      if vhigh = hzero then
+        return do_to_way(vlow);
+      else
+        return hlen + do_to_way(vhigh);
+      end if;
+    end if;
+  end function do_to_way;
+
+  --function to_way(wsel : way_selector_t) return natural is
+  --begin
+  --  return do_to_way(wsel);
+  --end function to_way;
+  -- Trick: the ways should be traversed in inverse range.
+  --   The reason is that upon initialization, the address 0 is matching all
+  --   N ways. The first way to be written will be way 0, hence if all all
+  --   ways are matching, way 0 should be returned.
+  function to_way(wsel : std_logic_vector) return natural is
+  begin
+    if (wsel(0) and wsel(wsel'length - 1)) = '1' or slv_is_x(wsel) then
+      return 0;
+    else
+      return to_integer(unsigned(compute_way(wsel)));
+    end if;
+  end function to_way;
+
+  -- Tags
+  function get_tag(tag_slv : std_logic_vector; constant cs : csizes)
+    return std_logic_vector is
+    variable o : std_logic_vector(cs.tag_width - 1 downto 0);
+  begin
+    o := tag_slv(o'length - 1 downto 0);
+    return o;
+  end function get_tag;
+
+  function get_tag_valid(tag_slv : std_logic_vector; constant cs : csizes)
+    return std_logic is
+    variable o : std_logic;
+  begin
+    o := tag_slv(cs.tag_width);
+    return o;
+  end function get_tag_valid;
+
+  function get_tag_dirty(tag_slv : std_logic_vector; constant cs : csizes)
+    return std_logic is
+    variable o : std_logic;
+  begin
+    o := tag_slv(cs.tag_width + 1);
+    return o;
+  end function get_tag_dirty;
+
+  function to_tag_slv(tag   : std_logic_vector; valid : std_logic;
+                      dirty : std_logic; ctxt : std_logic_vector)
+    return std_logic_vector is
+    variable slv_valid : std_logic_vector(0 downto 0);
+    variable slv_dirty : std_logic_vector(0 downto 0);
+  begin
+    slv_valid := (others => valid);
+    slv_dirty := (others => dirty);
+    return ctxt & slv_dirty & slv_valid & tag;
+  end function to_tag_slv;
 
 end package body cache_defs;
-

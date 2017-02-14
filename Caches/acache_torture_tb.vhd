@@ -2,11 +2,11 @@
 -- Title      : Torture test for associative cache
 -- Project    : Cache implementations
 -------------------------------------------------------------------------------
--- File       : SinglePort_Associative_Cache_Torture.vhd
+-- File       : acache_torture.vhd
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-12-30
--- Last update: 2016-12-30
+-- Last update: 2017-02-14
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -25,17 +25,29 @@ use ieee.numeric_std.all;
 use ieee.math_real.all;
 
 use work.cache_defs.all;
+use work.cache_sizing.all;
 
-entity SinglePort_Associative_Cache_Torture_tb is
-end entity SinglePort_Associative_Cache_Torture_tb;
+entity acache_torture_tb is
+end entity acache_torture_tb;
 
-architecture str of SinglePort_Associative_Cache_Torture_tb is
+architecture str of acache_torture_tb is
 
   -- component generics
-  constant MEMORY_LATENCY    : integer := 3;
-  constant DEBUG             : boolean := false;
-  constant MEMORY_ADDR_WIDTH : natural := 16;
+  constant ADDR_WIDTH        : positive := 24;
+  constant DATA_WIDTH        : positive := 32;
+  constant DATAS_PER_LINE    : positive := 16;
+  constant NB_WAYS           : positive := 2;
+  constant CACHE_SIZE_BYTES  : positive := 1024;
+  constant MEMORY_LATENCY    : integer  := 3;
+  constant DEBUG             : boolean  := false;
+  constant MEMORY_ADDR_WIDTH : natural  := 16;
 
+  constant cs : csizes := to_cache_sizing(ADDR_WIDTH, DATA_WIDTH,
+                                          DATAS_PER_LINE, NB_WAYS,
+                                          CACHE_SIZE_BYTES);
+
+  subtype addr_t is std_logic_vector(ADDR_WIDTH - 1 downto 0);
+  subtype data_t is std_logic_vector(DATA_WIDTH - 1 downto 0);
   type memory is array(0 to 2**(MEMORY_ADDR_WIDTH - DATA_WIDTH / 8) - 1) of data_t;
 
   -- component ports
@@ -43,12 +55,13 @@ architecture str of SinglePort_Associative_Cache_Torture_tb is
   signal clkena                   : std_logic                                 := '1';
   signal rst                      : std_logic                                 := '1';
   signal i_porta_req              : std_logic                                 := '0';
-  signal i_porta_we               : std_logic                                 := '0';
+  signal i_porta_wen              : std_logic                                 := '0';
   signal i_porta_addr             : addr_t                                    := (others => '0');
   signal i_porta_do_write_through : std_logic;
   signal i_porta_write_data       : std_logic_vector(DATA_WIDTH - 1 downto 0) := (others => 'X');
   signal o_porta_read_data        : std_logic_vector(DATA_WIDTH - 1 downto 0);
   signal o_porta_valid            : std_logic;
+  signal o_porta_wready           : std_logic;
 
   signal o_memory_req        : std_logic := '0';
   signal o_memory_we         : std_logic := '0';
@@ -56,18 +69,13 @@ architecture str of SinglePort_Associative_Cache_Torture_tb is
   signal o_memory_write_data : std_logic_vector(DATA_WIDTH - 1 downto 0);
   signal i_memory_read_data  : std_logic_vector(DATA_WIDTH - 1 downto 0);
   signal i_memory_valid      : std_logic;
-  signal o_dbg_state         : cache_state;
   signal o_dbg_cstats        : cache_stats_t;
 
-  signal porta_req        : std_logic := '0';
-  signal porta_we         : std_logic;
+  signal porta_ren        : std_logic := '0';
+  signal porta_wen        : std_logic := '0';
   signal porta_addr       : addr_t    := (others => '0');
   signal porta_wthrough   : std_logic;
   signal porta_write_data : data_t;
-
-  signal cls_req   : cls_op;
-  signal cls_creq  : cache_request_t;
-  signal cls_cresp : cache_response_t;
 
   procedure rand_bit(variable seed1, seed2 : inout positive;
                      b                     : out   std_logic) is
@@ -104,28 +112,11 @@ architecture str of SinglePort_Associative_Cache_Torture_tb is
       "refills=" & integer'image(stats.refills);
   end procedure report_cache_stats;
 
-  function cache_state_name(c : cache_state) return string is
-  begin
-    case c is
-      when s_idle             => return "idle";
-      when s_searching        => return "searching";
-      when s_prepare_flushing => return "prepare_flush";
-      when s_flush_outer      => return "flush_outer";
-      when s_flushing         => return "flushing";
-      when s_refill_memory    => return "refill_memory";
-      when s_refill_cache     => return "refill_cache";
-      when s_writethrough     => return "writethrough";
-      when s_write_allocate   => return "write_allocate";
-    end case;
-  end function cache_state_name;
-
-  function test_report_header(num_test : natural; num_action : natural;
-                              state    : cache_state)
+  function test_report_header(num_test : natural; num_action : natural)
     return string is
     constant testname : string := "Test";
   begin
-    return "[" & testname & ":" & integer'image(num_action) & "]" &
-      "[" & cache_state_name(state) & "]";
+    return "[" & testname & ":" & integer'image(num_action) & "]";
   end function test_report_header;
 
   function init_ram_data_offsets_addr(ofs : natural) return memory is
@@ -142,35 +133,30 @@ architecture str of SinglePort_Associative_Cache_Torture_tb is
 
 begin  -- architecture str
 
-  DUT : entity work.SinglePort_Associative_Cache(rtl)
-    generic map (DEBUG => DEBUG)
+  DUT : entity work.acache
+    generic map (ADDR_WIDTH       => ADDR_WIDTH,
+                 DATA_WIDTH       => DATA_WIDTH,
+                 DATAS_PER_LINE   => DATAS_PER_LINE,
+                 NB_WAYS          => NB_WAYS,
+                 CACHE_SIZE_BYTES => CACHE_SIZE_BYTES,
+                 LOWER_DATA_WIDTH => 32,
+                 WRITE_BACK       => true,
+                 STATISTICS       => true,
+                 DEBUG            => DEBUG)
     port map (
-      clk                      => clk,
-      rst                      => rst,
-      i_porta_req              => i_porta_req,
-      i_porta_we               => i_porta_we,
-      i_porta_addr             => i_porta_addr,
-      i_porta_do_write_through => i_porta_do_write_through,
-      i_porta_write_data       => i_porta_write_data,
-      o_porta_read_data        => o_porta_read_data,
-      o_porta_valid            => o_porta_valid,
-      -- Carry-over signals
-      o_creq                   => cls_creq,
-      i_cresp                  => cls_cresp,
-      -- Debug
-      o_dbg_state              => o_dbg_state,
-      o_dbg_cstats             => o_dbg_cstats);
+      clk                => clk,
+      rst                => rst,
+      i_req              => i_porta_req,
+      i_wen              => i_porta_wen,
+      i_addr             => i_porta_addr,
+      i_do_write_through => i_porta_do_write_through,
+      i_wdata            => i_porta_write_data,
+      o_rdata            => o_porta_read_data,
+      o_rdata_valid      => o_porta_valid,
+      o_wready           => o_porta_wready,
 
-  cls : entity work.cache_line_streamer
-    generic map (
-      ADDR_WIDTH           => ADDR_WIDTH,
-      DATA_WIDTH           => DATA_WIDTH,
-      DATAS_PER_LINE_WIDTH => DATAS_PER_LINE_WIDTH)
-    port map (
-      clk     => clk,
-      rst     => rst,
-      i_creq  => cls_creq,
-      o_cresp => cls_cresp,
+      -- Debug
+      o_dbg_cstats => o_dbg_cstats,
 
       o_memory_req   => o_memory_req,
       o_memory_we    => o_memory_we,
@@ -228,12 +214,12 @@ begin  -- architecture str
     end if;
 
     -- Enqueue a random request
-    i_porta_req                                             <= '1';
-    rand_bit(seed1, seed2, pa_we); i_porta_we               <= pa_we;
+    rand_bit(seed1, seed2, pa_we); i_porta_wen              <= pa_we;
     rand_bit(seed1, seed2, pa_wt); i_porta_do_write_through <= pa_wt;
+    i_porta_req <= '1';
 
-    rand_natural(seed1, seed2, 2**(MEMORY_ADDR_WIDTH - DATA_WIDTH / 8 - ADDR_DATA_NBITS) - 1, randaddr);
-    randaddr     := randaddr * 2**(ADDR_DATA_NBITS);
+    rand_natural(seed1, seed2, 2**(MEMORY_ADDR_WIDTH - DATA_WIDTH / 8 - cs.addr_data_nbits) - 1, randaddr);
+    randaddr     := randaddr * 2**(cs.addr_data_nbits);
     pa_addr      := std_logic_vector(to_unsigned(randaddr, pa_addr'length));
     i_porta_addr <= pa_addr;
     if pa_we = '1' then
@@ -248,16 +234,16 @@ begin  -- architecture str
     if DEBUG then
       if pa_we = '1' then
         if pa_wt = '1' then
-          report test_report_header(0, num_req, o_dbg_state) &
+          report test_report_header(0, num_req) &
             "writethrough: @" & to_hstring(pa_addr) & "<=" &
             to_hstring(pa_wdata);
         else
-          report test_report_header(0, num_req, o_dbg_state) &
+          report test_report_header(0, num_req) &
             "writeback: @" & to_hstring(pa_addr) & "<=" &
             to_hstring(pa_wdata);
         end if;
       else
-        report test_report_header(0, num_req, o_dbg_state) &
+        report test_report_header(0, num_req) &
           "read: @" & to_hstring(pa_addr);
       end if;
     end if;
@@ -269,19 +255,24 @@ begin  -- architecture str
 
     wait until clk = '1';
     wait until clk = '0';
-    if o_porta_valid = '0' then
+    if o_porta_valid = '0' or o_porta_wready = '0' then
       i_porta_req <= '0';
+      i_porta_wen <= '0';
     end if;
 
     -- Wait for an answer and in case of read check against check_ram
-    if o_porta_valid = '0' then
+    if pa_we = '0' and o_porta_valid = '0' then
       wait until clk = '0' and o_porta_valid = '1';
+    end if;
+
+    if pa_we = '1' and o_porta_wready = '0' then
+      wait until clk = '0' and o_porta_wready = '1';
     end if;
 
     if pa_we = '0' then
       expected_read := check_ram(randaddr / (DATA_WIDTH / 8));
       if o_porta_read_data /= expected_read then
-        report test_report_header(0, num_req, o_dbg_state) &
+        report test_report_header(0, num_req) &
           "Read @" & to_hstring(pa_addr) & " should return " &
           to_hstring(expected_read) & " while it returned " &
           to_hstring(o_porta_read_data) severity failure;
@@ -291,5 +282,3 @@ begin  -- architecture str
   end process torture;
 
 end architecture str;
-
--------------------------------------------------------------------------------

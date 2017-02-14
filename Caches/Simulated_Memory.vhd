@@ -7,7 +7,7 @@
 --            : Simon Desfarges <simon.desfarges@free.fr>
 -- Company    : 
 -- Created    : 2016-11-20
--- Last update: 2017-01-01
+-- Last update: 2017-02-14
 -- Platform   : 
 -- Standard   : VHDL'08
 -------------------------------------------------------------------------------
@@ -93,17 +93,19 @@ architecture rtl of Simulated_Memory is
     --x"00801021",  --  3c:       00801021        move    v0,a0
     --others => (others => '0')
   --);
-  --function init_ram_data_offsets_addr(ofs : natural) return memory is
+  --function init_ram_data_offsets_addr(step: natural; ofs : natural) return memory is
   --  variable o : memory;
   --  variable d : natural;
   --begin
   --  for i in o'range loop
-  --    d := (i * DATA_WIDTH / 8 + ofs); -- mod 2**memory(0)'length;
-  --    o(i) := std_logic_vector(to_unsigned(d, DATA_WIDTH));
+  --    for j in 0 to (DATA_WIDTH / step) - 1 loop
+  --      d := (i * DATA_WIDTH / 8 + ofs + j * step / 8); -- mod 2**memory(0)'length;
+  --      o(i)(step * (j + 1) - 1 downto step * j) := std_logic_vector(to_unsigned(d, step));
+  --    end loop;
   --  end loop;
   --  return o;
   --end function init_ram_data_offsets_addr;
-  --signal ram : memory := init_ram_data_offsets_addr(16#0100#);
+  --signal ram : memory := init_ram_data_offsets_addr(32, 16#0100#);
 
   impure function init_ram(FileName : string)
     return memory is
