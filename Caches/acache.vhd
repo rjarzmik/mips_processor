@@ -155,6 +155,7 @@ architecture rtl of acache is
 
   -- Reader and Writer
   signal w_ready          : std_ulogic;
+  signal miss_rdata       : data_t;
   signal miss_rdata_valid : std_ulogic;
   type misser_state_t is (m_idle, m_prep_flush_refill, m_flush_refill,
                           m_wmiss_cdata, m_wthrough_prep, m_whit_through_prep,
@@ -261,7 +262,7 @@ begin
 
   refill_wway_mask <= (others => cmem_we);
   cmem_wway        <= to_way_selector(tdatao.way, cs) and refill_wway_mask when misser_state = m_idle else
-               to_way_selector(search.way_evict, cs) and refill_wway_mask;
+                      to_way_selector(missed_search.way_evict, cs) and refill_wway_mask;
 
   -- Searcher
   cache_hit <= tdatao.found;
@@ -332,8 +333,9 @@ begin
 
   -- Reader
   -- r_ready       <= '0'        when not cache_hit          else '1';
-  o_rdata       <= cmem_rdata when (cache_hit and delayed_ren = '1')  or miss_rdata_valid = '1' else (others => 'X');
-  o_rdata_valid <= '1'        when (cache_hit and delayed_ren = '1' ) or miss_rdata_valid = '1' else '0';
+  o_rdata <= cmem_rdata when (cache_hit and delayed_ren = '1') else
+             miss_rdata when miss_rdata_valid = '1' else (others => 'X');
+  o_rdata_valid <= '1' when (cache_hit and delayed_ren = '1') or miss_rdata_valid = '1' else '0';
   -- Reader and Writer
   o_wready      <= w_ready;
 
@@ -421,7 +423,7 @@ begin
           if missed_search.wen = '1' then
             ns := m_wmiss_cdata;
           else
-            ns               := m_idle;
+            ns := m_idle;
           end if;
         end if;
 
@@ -475,6 +477,8 @@ begin
       else
         miss_rdata_valid <= '0';
       end if;
+
+      miss_rdata <= cmem_rdata;
     end if;
 
     if rising_edge(clk) and misser_state = m_idle then

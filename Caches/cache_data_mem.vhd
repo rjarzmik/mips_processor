@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-12-17
--- Last update: 2017-02-13
+-- Last update: 2017-02-21
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -125,7 +125,7 @@ begin  -- architecture str
         ADDR_WIDTH       => index_nb_bits + data_line_nb_bits,
         DATA_WIDTH       => DATA_WIDTH,
         WIDTH_WIDENER    => WIDTH_WIDENER,
-        READ_UNDER_WRITE => false,
+        READ_UNDER_WRITE => true,
         LOOKAHEAD        => false,
         DEBUG_NAME       => "cdata_w" & integer'image(i),
         DEBUG            => DEBUG)
