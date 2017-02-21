@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik <robert.jarzmik@free.fr>
 -- Company    :
 -- Created    : 2017-02-02
--- Last update: 2017-02-13
+-- Last update: 2017-02-21
 -- Platform   :
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -73,8 +73,9 @@ architecture str of sc_sram is
   subtype data_t is std_logic_vector(DATA_WIDTH - 1 downto 0);
   type mem_block_t is array(0 to 2**ADDR_WIDTH - 1) of data_t;
 
-  signal memory : mem_block_t := (others => (others => '0'));
-  signal rdata  : data_t;
+  signal memory       : mem_block_t := (others => (others => '0'));
+  signal rdata        : data_t;
+  signal delayed_data : data_t;
 
 begin  -- architecture str
 
@@ -108,15 +109,28 @@ begin  -- architecture str
 
   end process;
 
-  bypasser : process(wren, raddr, waddr, data, rdata)
-    variable bypass : boolean;
+  bypasser : process(clock, wren, raddr, waddr, data, rdata)
+    variable bypass, delayed_bypass : boolean;
   begin
     bypass := (wren = '1') and (raddr = waddr);
 
-    if READ_UNDER_WRITE and bypass then
-      q <= data;
+    if rising_edge(clock) then
+      delayed_data   <= data;
+      delayed_bypass := bypass;
+    end if;
+
+    if LOOKAHEAD then
+      if READ_UNDER_WRITE and bypass then
+        q <= data;
+      else
+        q <= rdata;
+      end if;
     else
-      q <= rdata;
+      if READ_UNDER_WRITE and delayed_bypass then
+        q <= delayed_data;
+      else
+        q <= rdata;
+      end if;
     end if;
   end process;
 
