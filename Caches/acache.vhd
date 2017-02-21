@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik <robert.jarzmik@free.fr>
 -- Company    :
 -- Created    : 2016-11-30
--- Last update: 2017-02-14
+-- Last update: 2017-02-21
 -- Platform   :
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -154,7 +154,8 @@ architecture rtl of acache is
   signal delayed_wthrough      : std_ulogic;
 
   -- Reader and Writer
-  signal w_ready : std_ulogic;
+  signal w_ready          : std_ulogic;
+  signal miss_rdata_valid : std_ulogic;
   type misser_state_t is (m_idle, m_prep_flush_refill, m_flush_refill,
                           m_wmiss_cdata, m_wthrough_prep, m_whit_through_prep,
                           m_wthrough, m_finish_wthrough);
@@ -310,9 +311,9 @@ begin
       search.way_evict <= tdatao.way_evict;
       search.etag      <= tdatao.etag;
 
-      delayed_ren <= i_req and not i_wen;
-      delayed_wen <= i_req and i_wen;
-      delayed_addr := i_addr;
+      delayed_ren   <= i_req and not i_wen;
+      delayed_wen   <= i_req and i_wen;
+      delayed_addr  := i_addr;
       delayed_wdata := i_wdata;
       if WRITE_BACK then
         delayed_wthrough <= i_do_write_through;
@@ -331,8 +332,8 @@ begin
 
   -- Reader
   -- r_ready       <= '0'        when not cache_hit          else '1';
-  o_rdata       <= cmem_rdata when cache_hit else (others => 'X');
-  o_rdata_valid <= '1'        when cache_hit else '0';
+  o_rdata       <= cmem_rdata when (cache_hit and delayed_ren = '1')  or miss_rdata_valid = '1' else (others => 'X');
+  o_rdata_valid <= '1'        when (cache_hit and delayed_ren = '1' ) or miss_rdata_valid = '1' else '0';
   -- Reader and Writer
   o_wready      <= w_ready;
 
@@ -420,7 +421,7 @@ begin
           if missed_search.wen = '1' then
             ns := m_wmiss_cdata;
           else
-            ns := m_idle;
+            ns               := m_idle;
           end if;
         end if;
 
@@ -468,6 +469,12 @@ begin
         cmem_wt_rway <= missed_search.way_evict;
       end if;
 
+      if misser_state = m_flush_refill and rf_done = '1' and
+        missed_search.wen = '0' then
+        miss_rdata_valid <= '1';
+      else
+        miss_rdata_valid <= '0';
+      end if;
     end if;
 
     if rising_edge(clk) and misser_state = m_idle then

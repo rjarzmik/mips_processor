@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik <robert.jarzmik@free.fr>
 -- Company    :
 -- Created    : 2017-01-24
--- Last update: 2017-02-07
+-- Last update: 2017-02-20
 -- Platform   :
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -283,7 +283,7 @@ begin  -- architecture str
     case state is
       when idle =>
         if ena = '1' and refill = '1' then
-          ns            := refilling;
+          ns := refilling;
           if flush = '0' then
             fifos2mem_ren <= '1';
           end if;
@@ -318,9 +318,10 @@ begin  -- architecture str
 
       when refilling =>
         c2fifos_saddr <= '0';
-        c2fifos_wen <= '1';
+        c2fifos_wen   <= '1';
         if fifos2mem_ready = '1' and f2c_empty = '1' then
-          ns := idle;
+          ns                 := idle;
+          cmem_raddr_overena <= true;
         end if;
     end case;
 
