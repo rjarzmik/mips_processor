@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-11
--- Last update: 2017-02-18
+-- Last update: 2017-02-24
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -103,7 +103,7 @@ architecture rtl of MIPS_CPU is
   signal next_pc             : std_logic_vector(ADDR_WIDTH - 1 downto 0);
   signal jump_target         : std_logic_vector(ADDR_WIDTH - 1 downto 0);
   signal fetched_instruction : std_logic_vector(DATA_WIDTH - 1 downto 0);
-  signal fetched_pc          : std_logic_vector(DATA_WIDTH - 1 downto 0);
+  signal fetched_pc          : std_logic_vector(ADDR_WIDTH - 1 downto 0);
   signal if_instr_tag        : instr_tag_t;
   signal di_instr_tag        : instr_tag_t;
   signal alu_op              : alu_op_type;

@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    :
 -- Created    : 2016-11-12
--- Last update: 2017-02-18
+-- Last update: 2017-02-24
 -- Platform   :
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -497,9 +497,15 @@ begin  -- architecture rtl
         src := jt_absolute;
     end case;
 
-    jt_addr_absolute <= next_pc(ADDR_WIDTH - 1 downto pc_displace'length) & pc_displace;
-    jt_addr_pcrelative <= std_logic_vector(unsigned(next_pc) +
-                                           unsigned(resize(immediate * 4, ADDR_WIDTH)));
+    if ADDR_WIDTH >= pc_displace'length then
+      jt_addr_absolute <= next_pc(ADDR_WIDTH - 1 downto pc_displace'length) & pc_displace;
+      jt_addr_pcrelative <= std_logic_vector(unsigned(next_pc) +
+                                             unsigned(resize(immediate * 4, ADDR_WIDTH)));
+    else
+      jt_addr_absolute <= pc_displace(jt_addr_absolute'length - 1 downto 0);
+      jt_addr_pcrelative <= std_logic_vector(unsigned(next_pc) +
+                                             unsigned(resize(immediate * 4, ADDR_WIDTH)));
+    end if;
 
     if src = jt_absolute then
       jt_mux_reg <= jt_addr_absolute;
@@ -509,9 +515,9 @@ begin  -- architecture rtl
 
     if rising_edge(clk) and stall_req = '0' then
       if src = jt_rs then
-        o_jump_target <= ra;
+        o_jump_target <= ra(o_jump_target'length - 1 downto 0);
       else
-        o_jump_target <= jt_mux_reg;
+        o_jump_target <= jt_mux_reg(o_jump_target'length - 1 downto 0);
       end if;
     end if;
   end process jumper_target;

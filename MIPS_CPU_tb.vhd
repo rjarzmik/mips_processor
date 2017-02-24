@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-12
--- Last update: 2017-02-18
+-- Last update: 2017-02-24
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -40,7 +40,7 @@ end entity MIPS_CPU_tb;
 architecture rtl of MIPS_CPU_tb is
 
   -- component generics
-  constant ADDR_WIDTH           : integer := 32;
+  constant ADDR_WIDTH           : integer := 16;
   constant DATA_WIDTH           : integer := 32;
   constant NB_REGISTERS_GP      : integer := 32;
   constant NB_REGISTERS_SPECIAL : integer := 2;
@@ -431,34 +431,34 @@ begin  -- architecture rtl
   -- type   : sequential
   -- inputs : clk, rst
   -- outputs:
-  mem : process (clk, rst, stop) is
-  begin  -- process mem
-    if rst = '1' then                   -- asynchronous reset (active low)
-      i_mem_rd_valid <= '0';
-      i_mem_rd_data  <= (others => '0');
-      i_mem_wr_ack   <= '0';
-    elsif stop = '0' and rising_edge(clk) then         -- rising clock edge
-      i_mem_wr_ack <= '0';
-      if o_mem_wr_en = '1' then
-        i_mem_rd_valid <= '0';
-        i_mem_rd_data  <= i_mem_rd_data;
-        assert i_mem_wr_ack = '0' report "Invalid transaction" severity error;
-        i_mem_wr_ack   <= '1';
-      else
-        -- copy rd @ to data and change data order (ABCD -> DCBA)
-        i_mem_rd_data <= o_mem_addr(3 downto 0) &
-                         o_mem_addr(7 downto 4) &
-                         o_mem_addr(11 downto 8) &
-                         o_mem_addr(15 downto 12) &
-                         o_mem_addr(19 downto 16) &
-                         o_mem_addr(23 downto 20) &
-                         o_mem_addr(27 downto 24) &
-                         o_mem_addr(31 downto 28);
+  --mem : process (clk, rst, stop) is
+  --begin  -- process mem
+  --  if rst = '1' then                   -- asynchronous reset (active low)
+  --    i_mem_rd_valid <= '0';
+  --    i_mem_rd_data  <= (others => '0');
+  --    i_mem_wr_ack   <= '0';
+  --  elsif stop = '0' and rising_edge(clk) then         -- rising clock edge
+  --    i_mem_wr_ack <= '0';
+  --    if o_mem_wr_en = '1' then
+  --      i_mem_rd_valid <= '0';
+  --      i_mem_rd_data  <= i_mem_rd_data;
+  --      assert i_mem_wr_ack = '0' report "Invalid transaction" severity error;
+  --      i_mem_wr_ack   <= '1';
+  --    else
+  --      -- copy rd @ to data and change data order (ABCD -> DCBA)
+  --      i_mem_rd_data <= o_mem_addr(3 downto 0) &
+  --                       o_mem_addr(7 downto 4) &
+  --                       o_mem_addr(11 downto 8) &
+  --                       o_mem_addr(15 downto 12) &
+  --                       o_mem_addr(19 downto 16) &
+  --                       o_mem_addr(23 downto 20) &
+  --                       o_mem_addr(27 downto 24) &
+  --                       o_mem_addr(31 downto 28);
 
-        i_mem_rd_valid <= '1';
-      end if;
-    end if;
-  end process mem;
+  --      i_mem_rd_valid <= '1';
+  --    end if;
+  --  end if;
+  --end process mem;
 
 end architecture rtl;
 
