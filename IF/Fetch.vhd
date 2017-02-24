@@ -1,22 +1,22 @@
 -------------------------------------------------------------------------------
 -- Title      : Instruction Fetch stage
--- Project    : 
+-- Project    : MIPS Processor
 -------------------------------------------------------------------------------
 -- File       : Fetch.vhd
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
--- Company    : 
+-- Company    :
 -- Created    : 2016-11-10
--- Last update: 2017-02-22
--- Platform   : 
+-- Last update: 2017-02-24
+-- Platform   :
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
 -- Description: Fetch instruction from I-Cache and forward to Decode-Issue
 -------------------------------------------------------------------------------
--- Copyright (c) 2016 
+-- Copyright (c) 2016 Robert Jarzmik <robert.jarzmik@free.fr>
 -------------------------------------------------------------------------------
 -- Revisions  :
--- Date        Version  Author  Description
--- 2016-11-10  1.0      rj      Created
+-- Date        Version  Author                  Description
+-- 2016-11-10  1.0      robert.jarzmik@free.fr  Created
 -------------------------------------------------------------------------------
 
 library ieee;
@@ -27,8 +27,6 @@ use work.cpu_defs.all;
 use work.cache_defs.all;
 use work.instruction_defs.all;
 use work.instruction_prediction.prediction_t;
-
--------------------------------------------------------------------------------
 
 entity Fetch is
 
@@ -67,136 +65,6 @@ entity Fetch is
     );
 
 end entity Fetch;
-
--------------------------------------------------------------------------------
-
-architecture rtl3 of Fetch is
-  subtype addr_t is std_logic_vector(ADDR_WIDTH - 1 downto 0);
-  subtype data_t is std_logic_vector(DATA_WIDTH - 1 downto 0);
-
-  constant nop_instruction : std_logic_vector(DATA_WIDTH - 1 downto 0) := (others => '0');
-
-  --- Control signal
-  signal kill_fetch  : std_logic;       -- Fetch stage is killed, wipe out.
-  signal do_stall_pc : std_logic;
-
-  --- Signal from program counter provider
-  signal pcprovider_pc                : addr_t;
-  signal pcprovider_pc_instr_tag      : instr_tag_t;
-  signal pcprovider_next_pc           : addr_t;
-  signal pcprovider_next_pc_instr_tag : instr_tag_t;
-  signal pcprovider_mispredicted      : std_logic;
-
-  --- Signals from instruction provider
-  signal iprovider_pc                : addr_t;
-  signal iprovider_pc_instr_tag      : instr_tag_t;
-  signal iprovider_data              : data_t;
-  signal iprovider_data_valid        : std_logic;
-  signal iprovider_do_step_pc        : std_logic;
-  signal dbg_iprovider_fetching      : addr_t;
-  signal dbg_iprovider_fetching_itag : instr_tag_t;
-
-  --- Outgoing to next pipeline stage instruction
-  signal out_pc   : addr_t;
-  signal out_data : data_t;
-  signal out_itag : instr_tag_t;
-
-  --- Debug
-  signal dbg_pcprovider_prediction : prediction_t;
-
-begin
-  iprovider : entity work.Instruction_Provider
-    generic map (
-      ADDR_WIDTH => ADDR_WIDTH,
-      DATA_WIDTH => DATA_WIDTH)
-    port map (
-      clk                      => clk,
-      rst                      => rst,
-      kill_req                 => kill_fetch,
-      stall_req                => stall_req,
-      i_next_pc                => pcprovider_pc,
-      i_next_pc_instr_tag      => pcprovider_pc_instr_tag,
-      i_next_next_pc           => pcprovider_next_pc,
-      i_next_next_pc_instr_tag => pcprovider_next_pc_instr_tag,
-      o_pc                     => iprovider_pc,
-      o_instr_tag              => iprovider_pc_instr_tag,
-      o_data                   => iprovider_data,
-      o_valid                  => iprovider_data_valid,
-      o_do_step_pc             => iprovider_do_step_pc,
-      o_l2c_req                => o_l2c_req,
-      o_l2c_we                 => o_l2c_we,
-      o_l2c_addr               => o_l2c_addr,
-      i_l2c_rdata              => i_l2c_rdata,
-      o_l2c_wdata              => o_l2c_wdata,
-      i_l2c_done               => i_l2c_done,
-      o_dbg_fetching           => dbg_iprovider_fetching,
-      o_dbg_fetching_itag      => dbg_iprovider_fetching_itag);
-
-  pc_reg : entity work.PC_Register(rtl)
-    generic map (
-      ADDR_WIDTH => ADDR_WIDTH,
-      STEP       => STEP)
-    port map (
-      clk                    => clk,
-      rst                    => rst,
-      stall_pc               => do_stall_pc,
-      jump_pc                => i_is_jump,
-      jump_target            => i_jump_target,
-      i_commited_instr_tag   => i_commited_instr_tag,
-      o_current_pc           => pcprovider_pc,
-      o_current_pc_instr_tag => pcprovider_pc_instr_tag,
-      o_next_pc              => pcprovider_next_pc,
-      o_next_pc_instr_tag    => pcprovider_next_pc_instr_tag,
-      o_mispredicted         => pcprovider_mispredicted,
-      o_dbg_prediction       => dbg_pcprovider_prediction);
-
-  --- PC stepper
-  do_stall_pc <= '1' when iprovider_do_step_pc = '0' else '0';
-
-  --- PC jump handler
-  kill_fetch <= kill_req;               --RJK or i_is_jump;
-
-  --- When PC program mispredicted, signal to kill the pipeline
-  o_mispredict_kill_pipeline <= pcprovider_mispredicted;
-
-  --- Decode input provider
-  o_instruction <= out_data;
-  o_pc_instr    <= out_pc;
-  o_instr_tag   <= out_itag;
-
-  fetch_outputs_latcher : process(clk, rst, kill_fetch, stall_req)
-  begin
-    if rst = '1' then
-      out_pc   <= (others => 'X');
-      out_data <= (others => '0');
-      out_itag <= INSTR_TAG_NONE;
-    elsif rising_edge(clk) then
-      if kill_fetch = '1' then
-        out_pc   <= (others => 'X');
-        out_data <= nop_instruction;
-        out_itag <= INSTR_TAG_NONE;
-      elsif stall_req = '1' then
-      else
-        if iprovider_data_valid = '1' then
-          out_pc   <= iprovider_pc;
-          out_data <= iprovider_data;
-          out_itag <= iprovider_pc_instr_tag;
-        else
-          out_pc   <= (others => 'X');
-          out_data <= nop_instruction;
-          out_itag <= INSTR_TAG_NONE;
-        end if;
-      end if;
-    end if;
-  end process fetch_outputs_latcher;
-
-  --- Debug signals
-  o_dbg_if_pc                 <= out_pc;
-  o_dbg_if_fetching_pc        <= dbg_iprovider_fetching;
-  o_dbg_if_fetching_instr_tag <= dbg_iprovider_fetching_itag;
-  o_dbg_prediction            <= dbg_pcprovider_prediction;
-
-end architecture rtl3;
 
 architecture instr_is_pc of Fetch is
   subtype addr_t is std_logic_vector(ADDR_WIDTH - 1 downto 0);
@@ -242,15 +110,10 @@ architecture simple of Fetch is
   signal r_kill_req      : std_logic;
   signal kill_next_valid : boolean;
 
-  -- Cycles of addresses
-  --   query_pc    ->    fetching_pc             -> fetched_pc
-  --   (on cache I/F)    wait for fetching_valid -> output for IF
-
   -- Cache address queries
-  signal first_query   : boolean := true;
-  signal change_query  : boolean;
-  signal query_pc      : addr_t;
-  signal next_query_pc : addr_t;
+  signal query_pc          : addr_t;
+  signal next_query_pc_req : std_logic;
+  signal next_query_pc     : addr_t;
 
   -- Currently fetching
   signal fetching_pc    : addr_t;
@@ -262,27 +125,37 @@ architecture simple of Fetch is
   signal fetched_data : data_t;
   signal itag         : instr_tag_t;
 
+  -- PC Predictor
+  signal predict_current : addr_t;
+  signal predict_next    : addr_t;
+
   -- Outgoing to next pipeline stage instruction
   signal out_pc     : addr_t;
   signal out_data   : data_t;
   signal out_itag   : instr_tag_t;
   signal data_valid : std_logic;
 begin
-
-  L1C : entity work.Instruction_Cache
+  iprovider: entity work.Instruction_Provider
     generic map (
       ADDR_WIDTH => ADDR_WIDTH,
       DATA_WIDTH => DATA_WIDTH)
     port map (
-      clk         => clk,
-      rst         => rst,
-      addr        => query_pc,
-      data        => fetching_data,
-      data_valid  => fetching_valid,
-      o_l2c_req   => o_l2c_req,
-      o_l2c_addr  => o_l2c_addr,
-      i_l2c_rdata => i_l2c_rdata,
-      i_l2c_done  => i_l2c_done);
+      clk             => clk,
+      rst             => rst,
+      kill_req        => i_is_jump,
+      stall_req       => stall_req,
+      i_kill_addr     => i_jump_target,
+      i_next_addr     => next_query_pc,
+      o_addr          => fetching_pc,
+      o_data          => fetching_data,
+      o_valid         => fetching_valid,
+      o_next_addr_req => next_query_pc_req,
+      o_l2c_req       => o_l2c_req,
+      o_l2c_we        => o_l2c_we,
+      o_l2c_addr      => o_l2c_addr,
+      i_l2c_rdata     => i_l2c_rdata,
+      o_l2c_wdata     => o_l2c_wdata,
+      i_l2c_done      => i_l2c_done);
 
   jumper : process(rst, clk, i_is_jump, fetching_valid)
   begin
@@ -295,29 +168,28 @@ begin
     end if;
   end process jumper;
 
-  cache_driver : process(rst, clk, stall_req, i_is_jump, i_jump_target,
-                         fetching_valid, first_query, query_pc, next_query_pc)
+  provider_driver : process(rst, clk, next_query_pc_req, query_pc, i_is_jump)
   begin
-    if i_is_jump = '1' then
-      next_query_pc <= i_jump_target;
+    --
+    -- RJK: next_query_pc should be retrieved out of predict_next
+    --
+
+    if rst = '1' then
+      next_query_pc <= std_logic_vector(to_unsigned(STEP, next_query_pc'length));
     else
       next_query_pc <= std_logic_vector(unsigned(query_pc) + STEP);
     end if;
 
-    change_query <= (first_query or fetching_valid = '1' or i_is_jump = '1')
-                    and stall_req = '0';
-
-    if first_query and rst = '0' and rising_edge(clk) then
-      first_query <= false;
-    end if;
-
     if rst = '1' then
-      query_pc <= (others => '0');
-    elsif rising_edge(clk) and change_query then
-      fetching_pc <= query_pc;
-      query_pc    <= next_query_pc;
+      query_pc <= std_logic_vector(to_unsigned(STEP, next_query_pc'length));
+    elsif rising_edge(clk) then
+      if i_is_jump = '1' then
+        query_pc <= i_jump_target;
+      elsif next_query_pc_req = '1' then
+        query_pc <= next_query_pc;
+      end if;
     end if;
-  end process cache_driver;
+  end process provider_driver;
 
   cache_aquire : process(rst, clk, stall_req, kill_req, fetching_valid)
   begin
@@ -340,8 +212,6 @@ begin
       end if;
     end if;
   end process cache_aquire;
-
-  o_l2c_we <= '0';
 
   out_pc   <= fetched_pc;
   out_data <= fetched_data;
