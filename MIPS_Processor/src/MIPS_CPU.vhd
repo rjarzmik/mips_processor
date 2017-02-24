@@ -399,14 +399,14 @@ begin  -- architecture rtl
 
   -- Control signals
   pc_stalled  <= mem2upstream_stall_req;
-  ife_stalled <= '1' when (RaW_detected = '1' and bp2di_reg1.we = '0' and bp2di_reg2.we = '0') or mem2upstream_stall_req = '1' else '0';
+  ife_stalled <= '1' when RaW_detected = '1' or mem2upstream_stall_req = '1' else '0';
   di_stalled  <= mem2upstream_stall_req;
   ex_stalled  <= mem2upstream_stall_req;
   mem_stalled <= '0';
   wb_stalled  <= '0';
 
   ife_killed <= mispredict_kills_pipeline;
-  di_killed  <= '1' when mispredict_kills_pipeline = '1' or (RaW_detected = '1' and bp2di_reg1.we = '0' and bp2di_reg2.we = '0') else '0';
+  di_killed  <= '1' when mispredict_kills_pipeline = '1' or RaW_detected = '1' else '0';
   mem_killed <= mispredict_kills_pipeline;
   ex_killed  <= mispredict_kills_pipeline;
   wb_killed  <= mispredict_kills_pipeline;
