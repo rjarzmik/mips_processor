@@ -135,7 +135,7 @@ architecture simple of Fetch is
   signal out_itag   : instr_tag_t;
   signal data_valid : std_logic;
 begin
-  iprovider: entity work.Instruction_Provider
+  iprovider : entity work.Instruction_Provider
     generic map (
       ADDR_WIDTH => ADDR_WIDTH,
       DATA_WIDTH => DATA_WIDTH)
@@ -186,7 +186,8 @@ begin
       if i_is_jump = '1' then
         query_pc <= i_jump_target;
       elsif next_query_pc_req = '1' then
-        query_pc <= next_query_pc;
+        query_pc        <= next_query_pc;
+        predict_current <= next_query_pc;
       end if;
     end if;
   end process provider_driver;

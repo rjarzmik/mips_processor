@@ -1,7 +1,7 @@
 MODULE := ProgramCounter
-DEPENDENCIES :=
+DEPENDENCIES := rjarzmik Caches
 PACKAGE := work
-SRCS := src/*.vhd
-MODULE_TESTBENCHES :=
+SRCS := src/*.vhd test/src/*.vhd
+MODULE_TESTBENCHES := branch_target_buffer_tb
 
 $(eval $(call DEFINE_MODULE,$(MODULE),$(PACKAGE),$(SRCS),$(MODULE_TESTBENCHES),$(DEPENDENCIES)))
