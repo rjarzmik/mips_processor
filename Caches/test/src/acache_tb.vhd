@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik <robert.jarzmik@free.fr>
 -- Company    :
 -- Created    : 2017-02-01
--- Last update: 2017-02-14
+-- Last update: 2018-07-26
 -- Platform   :
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -26,6 +26,8 @@
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
+
+library rjarzmik;
 
 use work.cache_defs.all;
 
@@ -815,7 +817,7 @@ begin  -- architecture test
   end process reporter;
 
   -- memory simulator
-  Simulated_Memory_1 : entity work.Simulated_Memory
+  Simulated_Memory_1 : entity rjarzmik.Simulated_Memory
     generic map (
       ADDR_WIDTH        => ADDR_WIDTH,
       DATA_WIDTH        => LOWER_DATA_WIDTH,

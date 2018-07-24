@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-12-30
--- Last update: 2017-02-14
+-- Last update: 2018-07-26
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -23,6 +23,8 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 use ieee.math_real.all;
+
+library rjarzmik;
 
 use work.cache_defs.all;
 use work.cache_sizing.all;
@@ -166,7 +168,7 @@ begin  -- architecture str
       i_memory_done  => i_memory_valid);
 
   -- memory simulator
-  Simulated_Memory_1 : entity work.Simulated_Memory
+  Simulated_Memory_1 : entity rjarzmik.Simulated_Memory
     generic map (
       ADDR_WIDTH        => ADDR_WIDTH,
       DATA_WIDTH        => DATA_WIDTH,
