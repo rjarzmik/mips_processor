@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik <robert.jarzmik@free.fr>
 -- Company    :
 -- Created    : 2017-01-31
--- Last update: 2017-02-03
+-- Last update: 2018-07-24
 -- Platform   :
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -122,11 +122,13 @@ begin  -- architecture test
 
   DUT_mread : fifo2memory
     generic map (
-      ADDR_WIDTH  => ADDR_WIDTH,
-      DATA_WIDTH  => DATA_WIDTH,
-      MAX_NBREADS => 16,
-      DEBUG_NAME  => DEBUG_NAME,
-      DEBUG       => DEBUG)
+      ADDR_WIDTH      => ADDR_WIDTH,
+      DATA_WIDTH      => DATA_WIDTH,
+      ADDR_STEP       => DATA_WIDTH / 8,
+      ADDR_STEP_WIDTH => ADDR_WIDTH,
+      MAX_NBREADS     => 16,
+      DEBUG_NAME      => DEBUG_NAME,
+      DEBUG           => DEBUG)
     port map (
       clock   => clock,
       saddr   => saddr,
@@ -160,7 +162,6 @@ begin  -- architecture test
       DATA_WIDTH        => DATA_WIDTH,
       MEMORY_ADDR_WIDTH => 16,
       MEMORY_LATENCY    => 3,
-      DEBUG_NAME        => DEBUG_NAME,
       DEBUG             => DEBUG)
     port map (
       clk                 => clock,
