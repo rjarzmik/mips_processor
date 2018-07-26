@@ -1,0 +1,7 @@
+MODULE := rjarzmik
+PACKAGE := rjarzmik
+SRCS := package/*.vhd body/*.vhd test/*.vhd
+MODULE_TESTBENCHES := fifo2memory_tb scfifo_enlarging_tb scfifo_shrinking_tb
+
+$(eval $(call DEFINE_MODULE,$(MODULE),$(PACKAGE),$(SRCS),$(MODULE_TESTBENCHES)))
+

@@ -1,0 +1,7 @@
+MODULE := MIPS_Processor
+DEPENDENCIES := Caches Control IF DI EX MEM ProgramCounter WB
+PACKAGE := work
+SRCS := src/*.vhd test/src/*.vhd
+MODULE_TESTBENCHES := mips_cpu_tb
+
+$(eval $(call DEFINE_MODULE,$(MODULE),$(PACKAGE),$(SRCS),$(MODULE_TESTBENCHES),$(DEPENDENCIES)))
