@@ -1,9 +1,12 @@
 GHDL ?= ghdl
+.PHONY: all clean run
 
 all: $(OUT)/MIPS_Processor/compiled | checkenv
 
 clean: checkenv
 	@rm -rf $(OUT)
+
+run: run_MIPS_Processor
 
 include Makefile.compiler_rules
 
