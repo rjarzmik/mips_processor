@@ -1,5 +1,5 @@
 MODULE := IF
-DEPENDENCIES := Caches MIPS_Processor
+DEPENDENCIES := Caches CPU_Definitions
 PACKAGE := work
 SRCS := src/*.vhd test/src/*.vhd
 MODULE_TESTBENCHES := Fetch_tb

@@ -8,6 +8,7 @@ clean: checkenv
 include Makefile.compiler_rules
 
 include rjarzmik/Makefile.module
+include CPU_Definitions/Makefile.module
 include Caches/Makefile.module
 include Control/Makefile.module
 include IF/Makefile.module

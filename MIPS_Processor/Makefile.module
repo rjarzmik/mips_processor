@@ -1,5 +1,5 @@
 MODULE := MIPS_Processor
-DEPENDENCIES := Caches Control IF DI EX MEM ProgramCounter WB
+DEPENDENCIES := CPU_Definitions Caches Control IF DI EX MEM ProgramCounter WB
 PACKAGE := work
 SRCS := src/*.vhd test/src/*.vhd
 MODULE_TESTBENCHES := mips_cpu_tb
