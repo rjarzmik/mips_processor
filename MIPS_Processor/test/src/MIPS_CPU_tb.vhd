@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-12
--- Last update: 2017-02-24
+-- Last update: 2018-07-26
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -29,6 +29,7 @@ use work.instruction_defs.instr_tag_t;
 use work.instruction_defs.INSTR_TAG_FIRST_VALID;
 use work.instruction_prediction.prediction_t;
 
+library rjarzmik;
 -------------------------------------------------------------------------------
 
 entity MIPS_CPU_tb is
@@ -346,12 +347,13 @@ begin  -- architecture rtl
       );
 
   -- memory simulator
-  Simulated_Memory_1 : entity work.Simulated_Memory
+  Simulated_Memory_1 : entity rjarzmik.Simulated_Memory
     generic map (
       ADDR_WIDTH        => ADDR_WIDTH,
       DATA_WIDTH        => DATA_WIDTH,
       MEMORY_ADDR_WIDTH => 16,
       MEMORY_LATENCY    => 3,
+      MEMORY_FILE       => "memory_data.txt",
       DEBUG             => DEBUG)
     port map (
       clk                 => clk,
