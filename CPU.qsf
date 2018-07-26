@@ -45,59 +45,49 @@ set_global_assignment -name PROJECT_CREATION_TIME_DATE "22:14:03  NOVEMBER 10, 2
 set_global_assignment -name LAST_QUARTUS_VERSION "16.1.0 Lite Edition"
 set_global_assignment -name PROJECT_OUTPUT_DIRECTORY output_files
 set_global_assignment -name SMART_RECOMPILE ON
-set_global_assignment -name VHDL_FILE IF/Fetch_Syn.vhd
-set_global_assignment -name VHDL_FILE EX/ALU_Multiplier.vhd
-set_global_assignment -name SDC_FILE CPU.out.sdc
-set_global_assignment -name VHDL_FILE EX/ALU_Mux.vhd
-set_global_assignment -name VHDL_FILE MIPS_CPU_Syn.vhd
-set_global_assignment -name VHDL_FILE rjarzmik/package/slv_utils.vhd -library rjarzmik
-set_global_assignment -name VHDL_FILE rjarzmik/package/memories.vhd -library rjarzmik
-set_global_assignment -name VHDL_FILE rjarzmik/package/fifos.vhd -library rjarzmik
-set_global_assignment -name VHDL_FILE "rjarzmik/body/slv_utils-body.vhd" -library rjarzmik
-set_global_assignment -name VHDL_FILE rjarzmik/body/slv_2d_mux.vhd -library rjarzmik
-set_global_assignment -name VHDL_FILE rjarzmik/body/scfifo_shrinking.vhd -library rjarzmik
-set_global_assignment -name VHDL_FILE rjarzmik/body/scfifo_enlarging.vhd -library rjarzmik
-set_global_assignment -name VHDL_FILE rjarzmik/body/scfifo.vhd -library rjarzmik
-set_global_assignment -name VHDL_FILE rjarzmik/body/sc_sram.vhd -library rjarzmik
-set_global_assignment -name VHDL_FILE rjarzmik/body/sc_dualw_sram.vhd -library rjarzmik
-set_global_assignment -name VHDL_FILE rjarzmik/body/fifo2memory.vhd -library rjarzmik
-set_global_assignment -name VHDL_FILE Caches/tags_data_mem.vhd
-set_global_assignment -name VHDL_FILE Caches/Simulated_Memory.vhd
-set_global_assignment -name VHDL_FILE Caches/refill_flush.vhd
-set_global_assignment -name VHDL_FILE Caches/cache_sizing.vhd
-set_global_assignment -name VHDL_FILE Caches/cache_defs.vhd
-set_global_assignment -name VHDL_FILE Caches/cache_data_mem.vhd
-set_global_assignment -name VHDL_FILE Caches/acache_syntest.vhd
-set_global_assignment -name VHDL_FILE Caches/acache.vhd
-set_global_assignment -name VHDL_FILE Control/Bypass.vhd
-set_global_assignment -name VHDL_FILE instruction_prediction.vhd
-set_global_assignment -name VHDL_FILE ProgramCounter/PC_Predictor.vhd
-set_global_assignment -name VHDL_FILE ProgramCounter/Instruction_Misprediction.vhd
-set_global_assignment -name VHDL_FILE ProgramCounter/instruction_record.vhd
-set_global_assignment -name VHDL_FILE ProgramCounter/Instruction_Tracker.vhd
-set_global_assignment -name VHDL_FILE instruction_tag.vhd
-set_global_assignment -name VHDL_FILE EX/ALU_Set_Lower_Than.vhd
-set_global_assignment -name VHDL_FILE EX/ALU_Substracter.vhd
-set_global_assignment -name VHDL_FILE EX/ALU_Log_Xor.vhd
-set_global_assignment -name VHDL_FILE EX/ALU_Log_Or.vhd
-set_global_assignment -name VHDL_FILE EX/ALU_Log_Nor.vhd
-set_global_assignment -name VHDL_FILE EX/ALU_Log_And.vhd
-set_global_assignment -name VHDL_FILE EX/ALU_Divider.vhd
-set_global_assignment -name VHDL_FILE IF/Instruction_Cache.vhd
-set_global_assignment -name VHDL_FILE IF/Fetch.vhd
-set_global_assignment -name VHDL_FILE MIPS_CPU.vhd
-set_global_assignment -name VHDL_FILE DI/Decode.vhd
-set_global_assignment -name VHDL_FILE DI/RegisterFile.vhd
-set_global_assignment -name VHDL_FILE ProgramCounter/PC_Register.vhd
-set_global_assignment -name VHDL_FILE ProgramCounter/PC_Adder.vhd
-set_global_assignment -name VHDL_FILE cpu_defs.vhd
-set_global_assignment -name VHDL_FILE EX/ALU.vhd
-set_global_assignment -name VHDL_FILE MEM/Memory_access.vhd
-set_global_assignment -name VHDL_FILE WB/Writeback.vhd
-set_global_assignment -name VHDL_FILE Control/Control_Decode_Dependencies.vhd
-set_global_assignment -name VHDL_FILE IF/Instruction_Provider.vhd
-set_global_assignment -name VHDL_FILE EX/ALU_Adder.vhd
-set_global_assignment -name SOURCE_FILE db/CPU.cmp.rdb
+set_global_assignment -name VHDL_FILE MIPS_Processor/src/MIPS_CPU_Syn.vhd
+set_global_assignment -name VHDL_FILE Caches/src/tags_data_mem.vhd
+set_global_assignment -name VHDL_FILE Caches/src/tag_entry_mux.vhd
+set_global_assignment -name VHDL_FILE Caches/src/memory_tagmem_internal.vhd
+set_global_assignment -name VHDL_FILE Caches/src/memory_cacheline_internal.vhd
+set_global_assignment -name VHDL_FILE Caches/src/memory_eviction_internal.vhd
+set_global_assignment -name VHDL_FILE Caches/src/memory_internal.vhd
+set_global_assignment -name VHDL_FILE Caches/src/mask_feeder.vhd
+set_global_assignment -name VHDL_FILE Caches/src/data_t_mux.vhd
+set_global_assignment -name VHDL_FILE Caches/src/cache_line_streamer.vhd
+set_global_assignment -name VHDL_FILE Caches/src/cache_line_mux.vhd
+set_global_assignment -name VHDL_FILE Caches/src/cache_defs.vhd
+set_global_assignment -name VHDL_FILE Caches/src/cache_data_mem.vhd
+set_global_assignment -name VHDL_FILE Control/src/Bypass.vhd
+set_global_assignment -name VHDL_FILE MIPS_Processor/src/instruction_prediction.vhd
+set_global_assignment -name VHDL_FILE ProgramCounter/src/PC_Predictor.vhd
+set_global_assignment -name VHDL_FILE ProgramCounter/src/Instruction_Misprediction.vhd
+set_global_assignment -name VHDL_FILE ProgramCounter/src/instruction_record.vhd
+set_global_assignment -name VHDL_FILE ProgramCounter/src/Instruction_Tracker.vhd
+set_global_assignment -name VHDL_FILE MIPS_Processor/src/instruction_tag.vhd
+set_global_assignment -name VHDL_FILE EX/src/ALU_Set_Lower_Than.vhd
+set_global_assignment -name VHDL_FILE EX/src/ALU_Substracter.vhd
+set_global_assignment -name VHDL_FILE EX/src/ALU_Multiplier.vhd
+set_global_assignment -name VHDL_FILE EX/src/ALU_Log_Xor.vhd
+set_global_assignment -name VHDL_FILE EX/src/ALU_Log_Or.vhd
+set_global_assignment -name VHDL_FILE EX/src/ALU_Log_Nor.vhd
+set_global_assignment -name VHDL_FILE EX/src/ALU_Log_And.vhd
+set_global_assignment -name VHDL_FILE EX/src/ALU_Divider.vhd
+set_global_assignment -name VHDL_FILE IF/src/Instruction_Cache.vhd
+set_global_assignment -name VHDL_FILE IF/src/Fetch.vhd
+set_global_assignment -name VHDL_FILE MIPS_Processor/src/MIPS_CPU.vhd
+set_global_assignment -name VHDL_FILE DI/src/Decode.vhd
+set_global_assignment -name VHDL_FILE DI/src/RegisterFile.vhd
+set_global_assignment -name VHDL_FILE ProgramCounter/src/PC_Register.vhd
+set_global_assignment -name VHDL_FILE ProgramCounter/src/PC_Adder.vhd
+set_global_assignment -name VHDL_FILE MIPS_Processor/src/cpu_defs.vhd
+set_global_assignment -name VHDL_FILE EX/src/ALU.vhd
+set_global_assignment -name VHDL_FILE MEM/src/Memory_access.vhd
+set_global_assignment -name VHDL_FILE WB/src/Writeback.vhd
+set_global_assignment -name VHDL_FILE Control/src/Control_Decode_Dependencies.vhd
+set_global_assignment -name VHDL_FILE Caches/src/SinglePort_Associative_Cache.vhd
+set_global_assignment -name VHDL_FILE IF/src/Instruction_Provider.vhd
+set_global_assignment -name VHDL_FILE EX/src/ALU_Adder.vhd
 
 # Classic Timing Assignments
 # ==========================
