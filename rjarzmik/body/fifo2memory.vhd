@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik <robert.jarzmik@free.fr>
 -- Company    :
 -- Created    : 2017-01-31
--- Last update: 2017-02-13
+-- Last update: 2018-07-19
 -- Platform   :
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -56,6 +56,9 @@
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
+
+library std;
+use std.textio.all;
 
 library rjarzmik;
 use rjarzmik.slv_utils.slv_is_x;
@@ -222,7 +225,7 @@ begin  -- architecture str
     if DEBUG and rising_edge(clock) then
       -- pragma translate_off
       if lmreq = '1' then
-        if mwen = '0' then
+        if wen = '0' then
           report dbg_name(DEBUG_NAME) & ": memory read request @" & to_hstring(lmaddr);
         else
           report dbg_name(DEBUG_NAME) & ": memory write request @" & to_hstring(lmaddr) &
