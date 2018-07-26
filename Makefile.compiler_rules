@@ -54,9 +54,11 @@ $(OUT)/$(1)/compiled: $$(OBJS_$(1)) $(OUT)/$(1)/imported | $(OUT)/$(1)
 	$$(file >$$@,"")
 
 compile_$(1): $(OUT)/$(1)/compiled
+
+filter-tb-output := sed -e 's_^[^@]*@\([0-9]*\)\([^:]*\):.*report \(.*\)[)]: \(.*\)_\1\2\t\3\t\4_' -e 's_^\([0-9]*\)ns_\1000ps_' -e 's_^\([0-9]*\)ms_\1000000ps_'
 run_$(1): $(OUT)/$(1)/compiled | checkenv
 	rsync -a $(1)/test/etc/ $(OUT)/$(1)/ || true
-	cd $$(<D) && for tb in $(4); do $$(GHDL) -r $$(GHDLFLAGS) $$(GHDLFLAGS_$(1)) $$$$tb; done
+	cd $$(<D) && for tb in $(4); do $$(GHDL) -r $$(GHDLFLAGS) $$(GHDLFLAGS_$(1)) $$$$tb | $(filter-tb-output); done
 .PHONY: compile_$(1) run_$(1)
 
 endef
