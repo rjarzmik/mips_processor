@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik <robert.jarzmik@free.fr>
 -- Company    :
 -- Created    : 2017-01-31
--- Last update: 2018-07-19
+-- Last update: 2018-07-31
 -- Platform   :
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -225,7 +225,7 @@ begin  -- architecture str
     if DEBUG and rising_edge(clock) then
       -- pragma translate_off
       if lmreq = '1' then
-        if wen = '0' then
+        if mwen = '0' then
           report dbg_name(DEBUG_NAME) & ": memory read request @" & to_hstring(lmaddr);
         else
           report dbg_name(DEBUG_NAME) & ": memory write request @" & to_hstring(lmaddr) &
