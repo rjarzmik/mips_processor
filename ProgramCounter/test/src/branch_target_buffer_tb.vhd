@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    :
 -- Created    : 2018-07-31
--- Last update: 2018-08-03
+-- Last update: 2018-08-04
 -- Platform   :
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -40,6 +40,7 @@ architecture test of branch_target_buffer_tb is
 
   -- component ports
   signal clk          : std_logic := '1';
+  signal stall        : std_logic := '0';
   signal query_addr   : std_logic_vector(ADDR_WIDTH - 1 downto 0) := (others => '0');
   signal reply_addr   : std_logic_vector(ADDR_WIDTH - 1 downto 0)  := (others => '0');
   signal reply_wfound : std_logic := '0';
@@ -96,6 +97,7 @@ begin  -- architecture test
       DEBUG            => DEBUG)
     port map (
       clk          => clk,
+      stall        => stall,
       query_addr   => query_addr,
       reply_addr   => reply_addr,
       reply_wfound => reply_wfound,

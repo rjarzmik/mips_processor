@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    :
 -- Created    : 2017-02-25
--- Last update: 2018-08-03
+-- Last update: 2018-08-04
 -- Platform   :
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -55,6 +55,7 @@ entity branch_target_buffer is
 
   port (
     clk          : in  std_logic;
+    stall        : in  std_logic;
     query_addr   : in  std_logic_vector(ADDR_WIDTH - 1 downto 0);
     reply_addr   : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
     reply_wfound : out std_logic;
@@ -156,7 +157,7 @@ begin  -- architecture str
       end if;
     end loop;
 
-    if rising_edge(clk) then
+    if stall = '0' and rising_edge(clk) then
       for i in 0 to NB_WAYS - 1 loop
         r_tags_read_data(i)            <= tags_read_data(i);
         r_tags_read_data_validfound(i) <= tags_read_data_validfound(i);
