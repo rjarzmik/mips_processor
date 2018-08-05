@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-13
--- Last update: 2017-01-11
+-- Last update: 2018-08-04
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -225,3 +225,7 @@ begin
     end if;
   end process;
 end architecture simple;
+
+architecture pipelined of PC_Register is
+begin
+end architecture pipelined;
