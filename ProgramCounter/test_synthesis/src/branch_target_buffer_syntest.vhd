@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    :
 -- Created    : 2017-02-25
--- Last update: 2017-03-04
+-- Last update: 2018-11-28
 -- Platform   :
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -24,16 +24,18 @@ use ieee.std_logic_1164.all;
 
 entity branch_target_buffer_syntest is
   generic (
-    ADDR_WIDTH       : natural  := 32;
+    ADDR_WIDTH       : natural  := 30;
     NB_WAYS          : positive := 2;
-    CACHE_SIZE_BYTES : positive := 256;
+    CACHE_SIZE_BYTES : positive := 1024;
     DEBUG            : boolean  := false
     );
 
   port (
     clk        : in  std_logic;
+    stall      : in  std_logic;
     query_addr : in  std_logic_vector(ADDR_WIDTH - 1 downto 0);
     reply_addr : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
+    reply_ways : out std_logic_vector(0 to NB_WAYS - 1);
     --
     update     : in  std_logic;
     wsrc_addr  : in  std_logic_vector(ADDR_WIDTH - 1 downto 0);
@@ -49,19 +51,22 @@ architecture str of branch_target_buffer_syntest is
   signal r_wsrc_addr  : addr_t;
   signal r_wtgt_addr  : addr_t;
   signal o_reply_addr : addr_t;
+  signal o_reply_ways : std_logic_vector(0 to NB_WAYS - 1);
   signal r_update     : std_logic;
 begin  -- architecture str
   branch_target_buffer_1 : entity work.branch_target_buffer
     generic map (
-      ADDR_WIDTH       => ADDR_WIDTH,
-      NB_WAYS          => NB_WAYS,
-      CACHE_SIZE_BYTES => CACHE_SIZE_BYTES,
-      STEP             => 4,
-      DEBUG            => DEBUG)
+      ADDR_WIDTH        => ADDR_WIDTH,
+      NB_WAYS           => NB_WAYS,
+      CACHE_SIZE_BYTES  => CACHE_SIZE_BYTES,
+      TWO_CYCLES_ANSWER => true,
+      DEBUG             => DEBUG)
     port map (
       clk        => clk,
+      stall      => stall,
       query_addr => r_query_addr,
       reply_addr => o_reply_addr,
+      reply_ways => o_reply_ways,
       update     => r_update,
       wsrc_addr  => r_wsrc_addr,
       wtgt_addr  => r_wtgt_addr);
@@ -74,6 +79,7 @@ begin  -- architecture str
       r_wsrc_addr  <= wsrc_addr;
       r_wtgt_addr  <= wtgt_addr;
       reply_addr   <= o_reply_addr;
+      reply_ways   <= o_reply_ways;
     end if;
   end process;
 end architecture str;

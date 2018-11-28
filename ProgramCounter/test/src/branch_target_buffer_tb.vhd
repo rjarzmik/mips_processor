@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    :
 -- Created    : 2018-07-31
--- Last update: 2018-08-04
+-- Last update: 2018-11-28
 -- Platform   :
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -16,7 +16,7 @@
 -------------------------------------------------------------------------------
 -- Revisions  :
 -- Date        Version  Author  Description
--- 2018-07-31  1.0      rjarzmik	Created
+-- 2018-07-31  1.0      rjarzmik        Created
 -------------------------------------------------------------------------------
 
 library ieee;
@@ -25,6 +25,7 @@ use ieee.numeric_std.all;
 
 library rjarzmik;
 use rjarzmik.slv_utils.and_reduce;
+use rjarzmik.slv_utils.or_reduce;
 
 entity branch_target_buffer_tb is
 end entity branch_target_buffer_tb;
@@ -32,24 +33,26 @@ end entity branch_target_buffer_tb;
 architecture test of branch_target_buffer_tb is
 
   -- component generics
-  constant ADDR_WIDTH       : natural := 32;
+  constant ADDR_WIDTH       : natural  := 32;
   constant NB_WAYS          : positive := 2;
   constant CACHE_SIZE_BYTES : positive := 32;
-  constant STEP             : natural := 4;
-  constant DEBUG            : boolean := false;
+  constant STEP             : natural  := 4;
+  constant DEBUG            : boolean  := true;
 
   -- component ports
-  signal clk          : std_logic := '1';
-  signal stall        : std_logic := '0';
+  signal clk          : std_logic                                 := '1';
+  signal stall        : std_logic                                 := '0';
   signal query_addr   : std_logic_vector(ADDR_WIDTH - 1 downto 0) := (others => '0');
-  signal reply_addr   : std_logic_vector(ADDR_WIDTH - 1 downto 0)  := (others => '0');
-  signal reply_wfound : std_logic := '0';
+  signal reply_addr   : std_logic_vector(ADDR_WIDTH - 1 downto 0) := (others => '0');
+  signal reply        : std_logic_vector(ADDR_WIDTH - 1 downto 0) := (others => '0');
+  signal reply_ways   : std_logic_vector(0 to NB_WAYS - 1)        := (others => '0');
+  signal reply_wfound : std_logic                                 := '0';
   signal update       : std_logic;
   signal wsrc_addr    : std_logic_vector(ADDR_WIDTH - 1 downto 0);
   signal wtgt_addr    : std_logic_vector(ADDR_WIDTH - 1 downto 0);
 
   -- clock
-  signal clkena           : std_logic := '1';
+  signal clkena : std_logic := '1';
 
   function to_addr(addr : in natural) return std_logic_vector is
   begin
@@ -70,7 +73,7 @@ architecture test of branch_target_buffer_tb is
     if do_print then
       report "Reply=" &
         "{found=" & boolean'image(reply_wfound = '1') &
-        ",@=" & to_hstring(reply_addr) & "}";
+        ",@=" & to_hstring(reply) & "}";
     end if;
   end procedure report_response;
 
@@ -88,28 +91,34 @@ architecture test of branch_target_buffer_tb is
 begin  -- architecture test
 
   -- component instantiation
-  DUT: entity work.branch_target_buffer
+  DUT : entity work.branch_target_buffer
     generic map (
-      ADDR_WIDTH       => ADDR_WIDTH,
-      NB_WAYS          => NB_WAYS,
-      CACHE_SIZE_BYTES => CACHE_SIZE_BYTES,
-      STEP             => STEP,
-      DEBUG            => DEBUG)
+      ADDR_WIDTH        => ADDR_WIDTH,
+      NB_WAYS           => NB_WAYS,
+      CACHE_SIZE_BYTES  => CACHE_SIZE_BYTES,
+      TWO_CYCLES_ANSWER => false,
+      DEBUG             => DEBUG)
     port map (
-      clk          => clk,
-      stall        => stall,
-      query_addr   => query_addr,
-      reply_addr   => reply_addr,
-      reply_wfound => reply_wfound,
-      update       => update,
-      wsrc_addr    => wsrc_addr,
-      wtgt_addr    => wtgt_addr);
+      clk        => clk,
+      stall      => stall,
+      query_addr => query_addr,
+      reply_addr => reply_addr,
+      reply_ways => reply_ways,
+      update     => update,
+      wsrc_addr  => wsrc_addr,
+      wtgt_addr  => wtgt_addr);
 
   -- clock generation
   clk <= (clkena and not clk) after 5 ps;
 
+  registerer : process(reply_addr, reply_ways)
+  begin
+    reply_wfound <= or_reduce(reply_ways);
+    reply        <= reply_addr;
+  end process registerer;
+
   -- waveform generation
-  WaveGen_Proc: process
+  WaveGen_Proc : process
   begin
     update <= '0';
 
@@ -123,55 +132,54 @@ begin  -- architecture test
 
     -- @25ps-35ps: create an entry for 16#0010# address
     query_addr <= to_addr(16#0010#);
-    update <= '1';
-    wsrc_addr <= to_addr(16#0010#);
-    wtgt_addr <= to_addr(16#001c#);
+    update     <= '1';
+    wsrc_addr  <= to_addr(16#0010#);
+    wtgt_addr  <= to_addr(16#001c#);
     do_cycle(DEBUG);
 
     -- @35ps: verify; the btb memories are now udpated
-    assert reply_wfound = '0';             -- previous value, 1 cycle in the past
-    assert reply_addr = to_addr(16#0000#); -- previous value, 1 cycle in the past
+    assert reply_wfound = '1';
+    assert reply = to_addr(16#001c#);
 
     -- @40ps: don't update anything, change query_addr
-    update <= '0';
+    update     <= '0';
     query_addr <= to_addr(16#0010#);
     do_cycle(DEBUG);
 
     -- @45ps: verify the entry is updated
     assert reply_wfound = '1';
-    assert reply_addr = to_addr(16#001c#); -- previous value, 1 cycle in the past
+    assert reply = to_addr(16#001c#);   -- previous value, 1 cycle in the past
     do_cycle(DEBUG);
 
     -- @55ps-65ps: create a second entry with same tag
     query_addr <= to_addr(16#0010#);
-    update <= '1';
-    wsrc_addr <= to_addr(16#0020#);
-    wtgt_addr <= to_addr(16#002c#);
+    update     <= '1';
+    wsrc_addr  <= to_addr(16#0020#);
+    wtgt_addr  <= to_addr(16#002c#);
     do_cycle(DEBUG);
 
     -- @65ps
     assert reply_wfound = '1';
-    assert reply_addr = to_addr(16#001c#); -- previous value or 16#001c# address
+    assert reply = to_addr(16#001c#);   -- previous value or 16#001c# address
 
     -- @65ps-75ps
     query_addr <= to_addr(16#0020#);
-    update <= '0';
+    update     <= '0';
     do_cycle(DEBUG);
 
     -- @75ps: verify the entry is updated
     assert reply_wfound = '1';
-    assert reply_addr = to_addr(16#002c#); -- previous value, 1 cycle in the past
+    assert reply = to_addr(16#002c#);   -- previous value, 1 cycle in the past
 
     -- @75ps-85ps: create a third entry with same tag
     query_addr <= to_addr(16#0010#);
-    update <= '1';
-    wsrc_addr <= to_addr(16#0030#);
-    wtgt_addr <= to_addr(16#003c#);
+    update     <= '1';
+    wsrc_addr  <= to_addr(16#0030#);
+    wtgt_addr  <= to_addr(16#003c#);
     do_cycle(DEBUG);
 
-    -- @85ps: this is the last cycle where 16#0010# hasn't been evicted
-    assert reply_wfound = '1';
-    assert reply_addr = to_addr(16#001c#); -- previous value or 16#001c# address
+    -- @85ps: value at 16#0010# has been evicted
+    assert reply_wfound = '0';
 
     -- @85ps-95ps: verify the entry is now evicted
     update <= '0';

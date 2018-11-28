@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    :
 -- Created    : 2017-02-25
--- Last update: 2018-08-04
+-- Last update: 2018-11-28
 -- Platform   :
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -16,13 +16,17 @@
 --   not 1.
 --
 --   Mode of operation :
---     - query_addr is sampled at rising edge of clk.
---       At this edge, reply_addr is filled with previous query_addr answer.
---       Before next rising edge, reply_addr is filled with this query_addr answer
---       (combinatory with a 1 cycle delay).
---
+--     - query_addr has to be registered.
 --     - if update = '1', the (wsrc_addr -> wtgt_addr) is added, evicting a
 --       random way.
+--     - if one-cycle operation mode (TWO_CYCLES_ANSWER == false)
+--       After next rising edge of clk, reply_addr and reply_wfound are
+--       populated for the query_addr of the current cycle.
+--     - if two-cycle operation mode (TWO_CYCLES_ANSWER == true)
+--       After next rising edge of clk, reply_addr and reply_wfound are
+--       populated for the query_addr of the former cycle.
+--
+--   Neither reply_addr nor reply_ways are registered.
 -------------------------------------------------------------------------------
 -- Copyright (c) 2017  Robert Jarzmik <robert.jarzmik@free.fr>
 -------------------------------------------------------------------------------
@@ -46,23 +50,23 @@ use work.cache_sizing.all;
 
 entity branch_target_buffer is
   generic (
-    ADDR_WIDTH       : natural;
-    NB_WAYS          : positive;
-    CACHE_SIZE_BYTES : positive;
-    STEP             : natural;
-    DEBUG            : boolean := false
+    ADDR_WIDTH        : natural;
+    NB_WAYS           : positive;
+    CACHE_SIZE_BYTES  : positive;
+    TWO_CYCLES_ANSWER : boolean := false;
+    DEBUG             : boolean := false
     );
 
   port (
-    clk          : in  std_logic;
-    stall        : in  std_logic;
-    query_addr   : in  std_logic_vector(ADDR_WIDTH - 1 downto 0);
-    reply_addr   : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
-    reply_wfound : out std_logic;
+    clk        : in  std_logic;
+    stall      : in  std_logic;
+    query_addr : in  std_logic_vector(ADDR_WIDTH - 1 downto 0);
+    reply_addr : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
+    reply_ways : out std_logic_vector(0 to NB_WAYS - 1);
     --
-    update       : in  std_logic;
-    wsrc_addr    : in  std_logic_vector(ADDR_WIDTH - 1 downto 0);
-    wtgt_addr    : in  std_logic_vector(ADDR_WIDTH - 1 downto 0)
+    update     : in  std_logic;
+    wsrc_addr  : in  std_logic_vector(ADDR_WIDTH - 1 downto 0);
+    wtgt_addr  : in  std_logic_vector(ADDR_WIDTH - 1 downto 0)
     );
 end entity branch_target_buffer;
 
@@ -78,15 +82,18 @@ architecture str of branch_target_buffer is
   type target_entry_t is array(0 to NB_WAYS - 1) of addr_t;
 
   -- Reader signals
-  signal r_query_addr                : addr_t;
-  signal mem_raddr                   : mem_addr_t;
-  signal tags_read_data              : tag_slv_vector;
-  signal r_tags_read_data            : tag_slv_vector;
-  signal tags_read_data_validfound   : std_ulogic_vector(0 to NB_WAYS - 1);
-  signal r_tags_read_data_validfound : std_ulogic_vector(0 to NB_WAYS - 1);
-  signal f_tags_read_data_validfound : std_ulogic_vector(0 to NB_WAYS - 1);
-  signal rfound                      : std_logic;
-  signal taddr_read_data             : target_entry_t;
+  signal r_query_addr      : addr_t;
+  signal mem_raddr         : mem_addr_t;
+  signal tags_read_data    : tag_slv_vector;
+  signal r_tags_read_data  : tag_slv_vector;
+  signal taddr_read_data   : target_entry_t;
+  signal r_taddr_read_data : target_entry_t;
+
+  -- Tag comparision signals
+  signal r_high_half_match : std_logic_vector(0 to NB_WAYS - 1);
+  signal high_half_match   : std_logic_vector(0 to NB_WAYS - 1);
+  signal low_half_match    : std_logic_vector(0 to NB_WAYS - 1);
+  signal way_match         : std_logic_vector(0 to NB_WAYS - 1);
 
   -- Writer signals
   signal mem_waddr          : mem_addr_t;
@@ -105,6 +112,26 @@ architecture str of branch_target_buffer is
       return std_logic_vector(to_unsigned(index, cs.index_width));
     end if;
   end function get_mem_addr;
+
+  function get_high_half_slv(i_addr : std_logic_vector)
+    return std_logic_vector is
+  begin
+    if i_addr'ascending then
+      return i_addr(i_addr'length / 2 to i_addr'length - 1);
+    else
+      return i_addr(i_addr'length - 1 downto i_addr'length / 2);
+    end if;
+  end function get_high_half_slv;
+
+  function get_low_half_slv(i_addr : std_logic_vector)
+    return std_logic_vector is
+  begin
+    if i_addr'ascending then
+      return i_addr(0 to i_addr'length / 2 - 1);
+    else
+      return i_addr(i_addr'length / 2 - 1 downto 0);
+    end if;
+  end function get_low_half_slv;
 
 begin  -- architecture str
 
@@ -142,27 +169,14 @@ begin  -- architecture str
   end generate tmem;
 
   -- Tags reader part
-  tags_reader : process(clk, mem_raddr, query_addr, r_query_addr,
-                        tags_read_data, tags_read_data_validfound)
+  tags_reader : process(clk, stall, query_addr, tags_read_data)
     variable te : tag_slv_t;
   begin
-    for i in 0 to NB_WAYS - 1 loop
-      te := tags_read_data(i);
-      if get_address_tag(query_addr, cs)(cs.tag_width / 2 - 1 downto 0)
-        = get_tag(te, cs)(cs.tag_width / 2 - 1 downto 0) and
-        get_tag_valid(te, cs) = '1' then
-        tags_read_data_validfound(i) <= '1';
-      else
-        tags_read_data_validfound(i) <= '0';
-      end if;
-    end loop;
-
     if stall = '0' and rising_edge(clk) then
-      for i in 0 to NB_WAYS - 1 loop
-        r_tags_read_data(i)            <= tags_read_data(i);
-        r_tags_read_data_validfound(i) <= tags_read_data_validfound(i);
-      end loop;
       r_query_addr <= query_addr;
+      for i in 0 to NB_WAYS - 1 loop
+        r_tags_read_data(i) <= tags_read_data(i);
+      end loop;
     end if;
   end process tags_reader;
 
@@ -184,35 +198,82 @@ begin  -- architecture str
         ADDR_WIDTH       => cs.index_width,
         DATA_WIDTH       => ADDR_WIDTH,
         READ_UNDER_WRITE => false,
-        LOOKAHEAD        => false,
+        LOOKAHEAD        => true,
         DEBUG_NAME       => "cdata_w" & integer'image(i),
         DEBUG            => DEBUG)
       port map (clk, mem_raddr, mem_waddr, wtgt_addr,
                 '1', mem_wren(i), taddr_read_data(i));
   end generate targetmems;
 
-  target_reader : process(r_query_addr, r_tags_read_data, taddr_read_data,
-                          f_tags_read_data_validfound,
-                          r_tags_read_data_validfound, rfound)
-    variable te     : tag_slv_t;
-    variable result : addr_t;
+  target_reader : process(clk, stall, taddr_read_data)
+  begin
+    if stall = '0' and rising_edge(clk) then
+      for i in 0 to NB_WAYS - 1 loop
+        r_taddr_read_data(i) <= taddr_read_data(i);
+      end loop;
+    end if;
+  end process target_reader;
+
+  tags_matcher : process(clk, stall, query_addr, r_query_addr,
+                         tags_read_data, r_taddr_read_data)
+    variable te              : tag_slv_t;
+    variable addr            : addr_t;
+    variable high_query_addr : std_logic_vector(ADDR_WIDTH / 2 - 1 downto 0);
+    variable low_query_addr  : std_logic_vector(ADDR_WIDTH / 2 - 1 downto 0);
   begin
     for i in 0 to NB_WAYS - 1 loop
-      te := r_tags_read_data(i);
-      if get_address_tag(r_query_addr, cs)(cs.tag_width - 1 downto cs.tag_width / 2)
-        = get_tag(te, cs)(cs.tag_width - 1 downto cs.tag_width / 2) and
-        r_tags_read_data_validfound(i) = '1' then
-        f_tags_read_data_validfound(i) <= '1';
+      te := tags_read_data(i);
+      if get_high_half_slv(get_address_tag(query_addr, cs)) =
+        get_high_half_slv(get_tag(te, cs)) then
+        high_half_match(i) <= '1';
       else
-        f_tags_read_data_validfound(i) <= '0';
+        high_half_match(i) <= '0';
       end if;
     end loop;
 
-    result := taddr_read_data(to_way(std_logic_vector(f_tags_read_data_validfound)));
-    rfound <= or_reduce(f_tags_read_data_validfound);
+    if stall = '0' and rising_edge(clk) then
+      r_high_half_match <= high_half_match;
+    end if;
 
-    reply_addr <= result;
-    reply_wfound <= rfound;
-  end process target_reader;
+    for i in 0 to NB_WAYS - 1 loop
+      if TWO_CYCLES_ANSWER then
+        te   := r_tags_read_data(i);
+        addr := r_query_addr;
+      else
+        te   := tags_read_data(i);
+        addr := query_addr;
+      end if;
+
+      if get_low_half_slv(get_address_tag(addr, cs)) =
+        get_low_half_slv(get_tag(te, cs)) then
+        low_half_match(i) <= '1';
+      else
+        low_half_match(i) <= '0';
+      end if;
+    end loop;
+
+    for i in 0 to NB_WAYS - 1 loop
+      if TWO_CYCLES_ANSWER then
+        way_match(i) <= r_high_half_match(i) and low_half_match(i);
+      else
+        way_match(i) <= high_half_match(i) and low_half_match(i);
+      end if;
+    end loop;
+  end process tags_matcher;
+
+  outputer : process(clk, way_match, taddr_read_data, r_taddr_read_data)
+    variable result : target_entry_t;
+  begin
+    for i in 0 to NB_WAYS - 1 loop
+      if TWO_CYCLES_ANSWER then
+        result := r_taddr_read_data;
+      else
+        result := taddr_read_data;
+      end if;
+    end loop;
+
+    reply_ways <= way_match;
+    reply_addr <= result(to_way(way_match));
+end process outputer;
 
 end architecture str;
