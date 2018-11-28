@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik <robert.jarzmik@free.fr>
 -- Company    :
 -- Created    : 2017-02-02
--- Last update: 2017-02-21
+-- Last update: 2018-11-28
 -- Platform   :
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -75,19 +75,27 @@ architecture str of sc_sram is
 
   signal memory       : mem_block_t := (others => (others => '0'));
   signal rdata        : data_t;
-  signal delayed_data : data_t;
+  signal bypass       : std_ulogic;
 
 begin  -- architecture str
 
   readwrite : process(clock, memory, raddr, waddr, wren, data)
   begin
     if LOOKAHEAD and not slv_is_x(raddr) then
-      rdata <= memory(to_integer(unsigned(raddr)));
+      if READ_UNDER_WRITE and bypass = '1' then
+        rdata <= data;
+      else
+        rdata <= memory(to_integer(unsigned(raddr)));
+      end if;
     end if;
 
     if rising_edge(clock) then
       if not LOOKAHEAD and rren = '1' and not slv_is_x(raddr) then
-        rdata <= memory(to_integer(unsigned(raddr)));
+        if READ_UNDER_WRITE and bypass = '1' then
+          rdata <= data;
+        else
+          rdata <= memory(to_integer(unsigned(raddr)));
+        end if;
       end if;
 
       if wren = '1' and not slv_is_x(waddr) then
@@ -110,28 +118,13 @@ begin  -- architecture str
   end process;
 
   bypasser : process(clock, wren, raddr, waddr, data, rdata)
-    variable bypass, delayed_bypass : boolean;
   begin
-    bypass := (wren = '1') and (raddr = waddr);
-
-    if rising_edge(clock) then
-      delayed_data   <= data;
-      delayed_bypass := bypass;
-    end if;
-
-    if LOOKAHEAD then
-      if READ_UNDER_WRITE and bypass then
-        q <= data;
-      else
-        q <= rdata;
-      end if;
+    if wren = '1' and (raddr = waddr) then
+      bypass <= '1';
     else
-      if READ_UNDER_WRITE and delayed_bypass then
-        q <= delayed_data;
-      else
-        q <= rdata;
-      end if;
+      bypass <= '0';
     end if;
   end process;
 
+  q <= rdata;
 end architecture str;
