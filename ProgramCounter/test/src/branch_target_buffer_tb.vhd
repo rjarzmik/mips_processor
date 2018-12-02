@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    :
 -- Created    : 2018-07-31
--- Last update: 2018-11-28
+-- Last update: 2018-12-02
 -- Platform   :
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -34,6 +34,7 @@ architecture test of branch_target_buffer_tb is
 
   -- component generics
   constant ADDR_WIDTH       : natural  := 32;
+  constant PREDICT_WIDTH    : natural  := 3;
   constant NB_WAYS          : positive := 2;
   constant CACHE_SIZE_BYTES : positive := 32;
   constant STEP             : natural  := 4;
@@ -49,7 +50,9 @@ architecture test of branch_target_buffer_tb is
   signal reply_wfound : std_logic                                 := '0';
   signal update       : std_logic;
   signal wsrc_addr    : std_logic_vector(ADDR_WIDTH - 1 downto 0);
+  signal wsrc_ways    : std_logic_vector(0 to NB_WAYS - 1)        := (others => '0');
   signal wtgt_addr    : std_logic_vector(ADDR_WIDTH - 1 downto 0);
+  signal wtgt_predict : std_logic_vector(PREDICT_WIDTH - 1 downto 0);
 
   -- clock
   signal clkena : std_logic := '1';
@@ -94,19 +97,22 @@ begin  -- architecture test
   DUT : entity work.branch_target_buffer
     generic map (
       ADDR_WIDTH        => ADDR_WIDTH,
+      PREDICT_WIDTH     => PREDICT_WIDTH,
       NB_WAYS           => NB_WAYS,
       CACHE_SIZE_BYTES  => CACHE_SIZE_BYTES,
       TWO_CYCLES_ANSWER => false,
       DEBUG             => DEBUG)
     port map (
-      clk        => clk,
-      stall      => stall,
-      query_addr => query_addr,
-      reply_addr => reply_addr,
-      reply_ways => reply_ways,
-      update     => update,
-      wsrc_addr  => wsrc_addr,
-      wtgt_addr  => wtgt_addr);
+      clk          => clk,
+      stall        => stall,
+      query_addr   => query_addr,
+      reply_addr   => reply_addr,
+      reply_ways   => reply_ways,
+      update       => update,
+      wsrc_addr    => wsrc_addr,
+      wsrc_ways    => wsrc_ways,
+      wtgt_addr    => wtgt_addr,
+      wtgt_predict => wtgt_predict);
 
   -- clock generation
   clk <= (clkena and not clk) after 5 ps;

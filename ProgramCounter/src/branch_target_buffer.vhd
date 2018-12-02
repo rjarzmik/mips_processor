@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    :
 -- Created    : 2017-02-25
--- Last update: 2018-11-28
+-- Last update: 2018-12-02
 -- Platform   :
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -20,13 +20,20 @@
 --     - if update = '1', the (wsrc_addr -> wtgt_addr) is added, evicting a
 --       random way.
 --     - if one-cycle operation mode (TWO_CYCLES_ANSWER == false)
---       After next rising edge of clk, reply_addr and reply_wfound are
---       populated for the query_addr of the current cycle.
+--       After next rising edge of clk, reply_addr, reply_ways and reply_predict
+--       are populated for the query_addr of the current cycle.
 --     - if two-cycle operation mode (TWO_CYCLES_ANSWER == true)
---       After next rising edge of clk, reply_addr and reply_wfound are
---       populated for the query_addr of the former cycle.
+--       After next rising edge of clk, reply_addr, reply_ways and reply_predict
+--       are populated for the query_addr of the former cycle.
 --
---   Neither reply_addr nor reply_ways are registered.
+--   Neither reply_addr, reply_ways nor reply_predict are registered.
+--
+--   Outputs:
+--     - reply_addr: this is the target address which might be valid
+--     - reply_ways: this is the way found array.
+--                   If one of the bits is 1, then reply_addr is valid
+--     - reply_predict : this is the prediction, up to the understanding of the
+--                       user code
 -------------------------------------------------------------------------------
 -- Copyright (c) 2017  Robert Jarzmik <robert.jarzmik@free.fr>
 -------------------------------------------------------------------------------
@@ -51,6 +58,7 @@ use work.cache_sizing.all;
 entity branch_target_buffer is
   generic (
     ADDR_WIDTH        : natural;
+    PREDICT_WIDTH     : natural := 0;
     NB_WAYS           : positive;
     CACHE_SIZE_BYTES  : positive;
     TWO_CYCLES_ANSWER : boolean := false;
@@ -58,28 +66,32 @@ entity branch_target_buffer is
     );
 
   port (
-    clk        : in  std_logic;
-    stall      : in  std_logic;
-    query_addr : in  std_logic_vector(ADDR_WIDTH - 1 downto 0);
-    reply_addr : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
-    reply_ways : out std_logic_vector(0 to NB_WAYS - 1);
+    clk           : in  std_logic;
+    stall         : in  std_logic;
+    query_addr    : in  std_logic_vector(ADDR_WIDTH - 1 downto 0);
+    reply_addr    : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
+    reply_predict : out std_logic_vector(PREDICT_WIDTH - 1 downto 0);
+    reply_ways    : out std_logic_vector(0 to NB_WAYS - 1);
     --
-    update     : in  std_logic;
-    wsrc_addr  : in  std_logic_vector(ADDR_WIDTH - 1 downto 0);
-    wtgt_addr  : in  std_logic_vector(ADDR_WIDTH - 1 downto 0)
+    update        : in  std_logic;
+    wsrc_addr     : in  std_logic_vector(ADDR_WIDTH - 1 downto 0);
+    wsrc_ways     : in  std_logic_vector(0 to NB_WAYS - 1);
+    wtgt_addr     : in  std_logic_vector(ADDR_WIDTH - 1 downto 0);
+    wtgt_predict  : in  std_logic_vector(PREDICT_WIDTH - 1 downto 0)
     );
 end entity branch_target_buffer;
 
 architecture str of branch_target_buffer is
-  constant cs : csizes := to_cache_sizing(ADDR_WIDTH, ADDR_WIDTH,
+  constant cs : csizes := to_cache_sizing(ADDR_WIDTH, ADDR_WIDTH + PREDICT_WIDTH,
                                           1, NB_WAYS,
                                           CACHE_SIZE_BYTES);
   constant TAG_SLV_EMPTY_CTXT : std_logic_vector(0 downto 0) := (others => '0');
   subtype addr_t is std_logic_vector(ADDR_WIDTH - 1 downto 0);
+  subtype data_t is std_logic_vector(ADDR_WIDTH + PREDICT_WIDTH - 1 downto 0);
   subtype mem_addr_t is std_logic_vector(cs.index_width - 1 downto 0);
   subtype tag_slv_t is std_logic_vector(cs.tag_slv_width - 1 downto 0);
   type tag_slv_vector is array(0 to NB_WAYS - 1) of tag_slv_t;
-  type target_entry_t is array(0 to NB_WAYS - 1) of addr_t;
+  type target_entry_t is array(0 to NB_WAYS - 1) of data_t;
 
   -- Reader signals
   signal r_query_addr      : addr_t;
@@ -101,6 +113,8 @@ architecture str of branch_target_buffer is
   signal mem_wren           : std_logic_vector(0 to NB_WAYS - 1);
   signal way_to_update      : natural range 0 to NB_WAYS - 1 := 0;
   signal way_to_update_mask : std_logic_vector(0 to NB_WAYS - 1);
+  signal wtgt               : std_logic_vector(wtgt_addr'length +
+                                               wtgt_predict'length - 1 downto 0);
 
   function get_mem_addr(i_addr : addr_t) return mem_addr_t is
     variable index : natural range 0 to cs.nb_lines - 1;
@@ -150,7 +164,11 @@ begin  -- architecture str
   common_writer : process(update, way_to_update, way_to_update_mask)
   begin
     way_to_update_mask <= (others => update);
-    mem_wren           <= to_way_selector(way_to_update, cs) and way_to_update_mask;
+    if or_reduce(wsrc_ways) = '0' then
+      mem_wren <= to_way_selector(way_to_update, cs) and way_to_update_mask;
+    else
+      mem_wren <= wsrc_ways and way_to_update_mask;
+    end if;
   end process common_writer;
 
   ------------------------------------------------------------------------------
@@ -192,16 +210,18 @@ begin  -- architecture str
   ------------------------------------------------------------------------------
   ------------------------------ Target addresses ------------------------------
   ------------------------------------------------------------------------------
+  wtgt <= wtgt_addr & wtgt_predict;
+
   targetmems : for i in 0 to NB_WAYS - 1 generate
     cdata : sc_sram
       generic map (
         ADDR_WIDTH       => cs.index_width,
-        DATA_WIDTH       => ADDR_WIDTH,
+        DATA_WIDTH       => ADDR_WIDTH + PREDICT_WIDTH,
         READ_UNDER_WRITE => false,
         LOOKAHEAD        => true,
         DEBUG_NAME       => "cdata_w" & integer'image(i),
         DEBUG            => DEBUG)
-      port map (clk, mem_raddr, mem_waddr, wtgt_addr,
+      port map (clk, mem_raddr, mem_waddr, wtgt,
                 '1', mem_wren(i), taddr_read_data(i));
   end generate targetmems;
 
@@ -272,8 +292,10 @@ begin  -- architecture str
       end if;
     end loop;
 
-    reply_ways <= way_match;
-    reply_addr <= result(to_way(way_match));
-end process outputer;
+    reply_ways    <= way_match;
+    reply_addr    <= result(to_way(way_match))(result(0)'length - 1
+                                               downto PREDICT_WIDTH);
+    reply_predict <= result(to_way(way_match))(PREDICT_WIDTH - 1 downto 0);
+  end process outputer;
 
 end architecture str;
