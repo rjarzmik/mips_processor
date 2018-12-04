@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-15
--- Last update: 2017-01-14
+-- Last update: 2018-12-04
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -43,5 +43,8 @@ package cpu_defs is
   end record register_port_type;
   constant REG_IDLE : register_port_type :=
     (we => '0', idx => 0, data => (others => 'X'));
+
+  subtype prediction_t is std_ulogic_vector(1 downto 0);
+  subtype instr_tag_t is std_ulogic_vector(REGISTER_WIDTH - 1 downto 0);
 
 end package cpu_defs;

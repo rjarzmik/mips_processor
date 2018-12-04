@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    :
 -- Created    : 2016-12-03
--- Last update: 2017-02-24
+-- Last update: 2018-12-04
 -- Platform   :
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -14,7 +14,7 @@
 --   Working model :
 --     - if kill_req = '1' :
 --       - all currently fetching instructions are dropped
---       - the next to query instruction is programmed at @i_kill_addr
+--       - the next to query instruction is programmed at @i_next_addr
 --     - if stall_req = '1' :
 --       - the address pushed on the cache query is stalled
 --       - even if the value on o_data is valid, o_valid is forced to '0'
@@ -56,8 +56,6 @@ entity Instruction_Provider is
     --- doesn't go forward
     stall_req       : in  std_logic;
     -- addresses where to fetch from
-    --- kill_addr is used only when kill_req = '1'else next_addr is used
-    i_kill_addr     : in  std_logic_vector(ADDR_WIDTH - 1 downto 0);
     i_next_addr     : in  std_logic_vector(ADDR_WIDTH - 1 downto 0);
     -- fetched data
     o_addr          : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
@@ -109,15 +107,11 @@ begin
       i_l2c_rdata => i_l2c_rdata,
       i_l2c_done  => i_l2c_done);
 
-  cache_driver : process(rst, clk, stall_req, kill_req, i_kill_addr, i_next_addr,
+  cache_driver : process(rst, clk, stall_req, kill_req, i_next_addr,
                          fetching_valid, change_query, first_query, query_pc,
                          next_query_pc)
   begin
-    if kill_req = '1' then
-      next_query_pc <= i_kill_addr;
-    else
-      next_query_pc <= i_next_addr;
-    end if;
+    next_query_pc <= i_next_addr;
 
     change_query <= (first_query or fetching_valid = '1' or kill_req = '1')
                     and stall_req = '0';

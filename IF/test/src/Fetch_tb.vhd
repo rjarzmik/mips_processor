@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-11
--- Last update: 2016-12-03
+-- Last update: 2018-12-04
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -23,6 +23,8 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
+library rjarzmik;
+use rjarzmik.Simulated_Memory;
 -------------------------------------------------------------------------------
 
 entity Fetch_tb is
@@ -45,12 +47,11 @@ architecture rtl of Fetch_tb is
   -- reset
   signal Rst : std_logic := '1';
 
-  signal instruction  : std_logic_vector(DATA_WIDTH - 1 downto 0);
-  signal pc           : std_logic_vector(ADDR_WIDTH - 1 downto 0) := std_logic_vector(to_unsigned(0, ADDR_WIDTH));
-  signal next_pc      : std_logic_vector(ADDR_WIDTH - 1 downto 0) := std_logic_vector(to_unsigned(4, ADDR_WIDTH));
-  signal next_next_pc : std_logic_vector(ADDR_WIDTH - 1 downto 0) := std_logic_vector(to_unsigned(4, ADDR_WIDTH));
-  signal stall_req    : std_logic                                 := '0';
-  signal stall_pc     : std_logic                                 := '0';
+  signal instruction : std_logic_vector(DATA_WIDTH - 1 downto 0);
+  signal pc          : std_logic_vector(ADDR_WIDTH - 1 downto 0) := std_logic_vector(to_unsigned(0, ADDR_WIDTH));
+  signal next_pc     : std_logic_vector(ADDR_WIDTH - 1 downto 0) := std_logic_vector(to_unsigned(4, ADDR_WIDTH));
+  signal stall_req   : std_logic                                 := '0';
+  signal pc_req      : std_logic                                 := '0';
 
   signal jump_pc     : std_logic;
   signal jump_target : std_logic_vector(ADDR_WIDTH - 1 downto 0);
@@ -67,7 +68,7 @@ architecture rtl of Fetch_tb is
 begin  -- architecture rtl
 
   -- component instantiation
-  dut : entity work.Fetch(rtl3)
+  dut : entity work.Fetch(simple)
     generic map (
       ADDR_WIDTH => ADDR_WIDTH,
       DATA_WIDTH => DATA_WIDTH)
@@ -77,21 +78,20 @@ begin  -- architecture rtl
       stall_req            => '0',
       kill_req             => '0',
       i_pc                 => pc,
-      i_next_pc            => next_pc,
-      i_next_next_pc       => next_next_pc,
+      o_pc_req             => pc_req,
       o_instruction        => instruction,
-      o_do_stall_pc        => stall_pc,
-      o_L2c_req            => o_L2c_req,
-      o_L2c_addr           => o_L2c_addr,
-      i_L2c_read_data      => i_L2c_read_data,
-      i_L2c_valid          => i_L2c_valid,
+      o_l2c_req            => o_L2c_req,
+      o_l2c_addr           => o_L2c_addr,
+      i_l2c_rdata          => i_L2c_read_data,
+      i_l2c_done           => i_l2c_valid,
       o_dbg_if_fetching_pc => dbg_if_pc);
 
-  Simulated_Memory_1 : entity work.Simulated_Memory
+  Simulated_Memory_1 : entity rjarzmik.Simulated_Memory
     generic map (
       ADDR_WIDTH     => ADDR_WIDTH,
       DATA_WIDTH     => DATA_WIDTH,
-      MEMORY_LATENCY => MEMORY_LATENCY)
+      MEMORY_LATENCY => MEMORY_LATENCY,
+      DEBUG          => true)
     port map (
       clk                 => Clk,
       rst                 => Rst,
@@ -107,19 +107,20 @@ begin  -- architecture rtl
       ADDR_WIDTH => ADDR_WIDTH,
       STEP       => 4)
     port map (
-      clk            => Clk,
-      rst            => Rst,
-      stall_pc       => stall_pc,
-      jump_pc        => jump_pc,
-      jump_target    => jump_target,
-      o_current_pc   => pc,
-      o_next_pc      => next_pc,
-      o_next_next_pc => next_next_pc);
+      clk          => Clk,
+      rst          => Rst,
+      stall_pc     => stall_req,
+      jump_pc      => jump_pc,
+      jump_target  => jump_target,
+      o_current_pc => pc);
 
   -- reset
   Rst <= '0'     after 12 ps;
   -- clock generation
   Clk <= not Clk after 5 ps;
+
+  --
+  stall_req <= not pc_req;
 
   -- waveform generation
   WaveGen_Proc : process

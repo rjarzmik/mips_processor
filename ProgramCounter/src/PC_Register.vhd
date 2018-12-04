@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-13
--- Last update: 2018-08-04
+-- Last update: 2018-12-04
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -24,11 +24,6 @@ use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
 use work.cpu_defs.all;
-use work.instruction_defs.all;
-use work.instruction_record.instr_record;
-use work.instruction_prediction.prediction_t;
-
--------------------------------------------------------------------------------
 
 entity PC_Register is
 
@@ -38,27 +33,24 @@ entity PC_Register is
     );
 
   port (
-    clk                    : in  std_logic;
-    rst                    : in  std_logic;
-    stall_pc               : in  std_logic;
-    jump_pc                : in  std_logic;
-    -- jump_target: should appear on o_pc
-    jump_target            : in  std_logic_vector(ADDR_WIDTH - 1 downto 0);
-    i_commited_instr_tag   : in  instr_tag_t;
-    o_current_pc           : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
-    o_current_pc_instr_tag : out instr_tag_t;
-    o_next_pc              : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
-    o_next_pc_instr_tag    : out instr_tag_t;
-    o_mispredicted         : out std_logic;
-    -- Debug
-    o_dbg_prediction       : out prediction_t
+    clk          : in  std_logic;
+    rst          : in  std_logic;
+    stall_pc     : in  std_logic;
+    -- jump_target: should appear on o_pc on clk rising edge if stall_pc = '0'
+    jump_pc      : in  std_logic;
+    jump_target  : in  std_logic_vector(ADDR_WIDTH - 1 downto 0);
+    o_current_pc : out std_logic_vector(ADDR_WIDTH - 1 downto 0)
+   -- Debug
     );
 
 end entity PC_Register;
 
 -------------------------------------------------------------------------------
+------------ Architecture simple: always step the PC, no prediction -----------
+-------------------------------------------------------------------------------
+architecture simple of PC_Register is
+  subtype addr_t is std_logic_vector(ADDR_WIDTH - 1 downto 0);
 
-architecture rtl of PC_Register is
   component PC_Adder is
     generic (
       ADDR_WIDTH : integer;
@@ -68,164 +60,36 @@ architecture rtl of PC_Register is
       next_pc    : out std_logic_vector(ADDR_WIDTH - 1 downto 0));
   end component PC_Adder;
 
-  procedure update_next_instr_tag(last_used_tag : in  instr_tag_t;
-                                  signal itag   : out instr_tag_t) is
-  begin
-    itag <= last_used_tag;
-  end procedure update_next_instr_tag;
+  signal pc         : addr_t := (others => '0');
+  signal pc_stepped : addr_t := (others => '0');
 
-  -----------------------------------------------------------------------------
-  -- Internal signal declarations
-  -----------------------------------------------------------------------------
-  signal pc                : std_logic_vector(ADDR_WIDTH - 1 downto 0);
-  signal pc_instr_tag      : instr_tag_t;
-  signal pc_next           : std_logic_vector(ADDR_WIDTH - 1 downto 0);
-  signal pc_next_instr_tag : instr_tag_t;
-  signal pc_next_next      : std_logic_vector(ADDR_WIDTH - 1 downto 0);
-
-  --- Instruction tracker
-  signal instr_tag             : instr_tag_t;
-  signal itrack_req_pc         : std_logic;
-  signal itrack_req_pc_next    : std_logic;
-  signal commited_instr_record : instr_record;
-  signal commited_instr_tag    : instr_tag_t;
-
-  --- Instruction misprediction tracker
-  signal mispredicted                            : std_logic;
-  signal mispredict_correct_pc                   : std_logic_vector(ADDR_WIDTH - 1 downto 0);
-  signal mispredict_wrongly_taken_branch         : boolean;
-  signal mispredict_wrongly_not_taken_branch     : boolean;
-  signal mispredict_wrongly_taken_jump           : boolean;
-  signal mispredict_wrongly_not_taken_jump       : boolean;
-  signal mispredict_wrongly_pc_disrupt           : boolean;
-  signal mispredict_wrongly_predicted_is_branch  : boolean;
-  signal mispredict_wrongly_predicted_is_jump    : boolean;
-  signal mispredict_wrongly_predicted_is_stepped : boolean;
-
---- Jump internal signals
-begin  -- architecture rtl
-
-  -----------------------------------------------------------------------------
-  -- Component instantiations
-  -----------------------------------------------------------------------------
-  itracker : entity work.Instruction_Tracker
-    generic map (
-      ADDR_WIDTH => ADDR_WIDTH)
-    port map (
-      clk                     => clk,
-      rst                     => rst,
-      i_record_pc1_req        => itrack_req_pc,
-      i_record_pc2_req        => itrack_req_pc_next,
-      i_pc1                   => pc,
-      i_pc2                   => pc_next,
-      i_pc1_instr_tag         => pc_instr_tag,
-      i_pc2_instr_tag         => pc_next_instr_tag,
-      i_pc1_predict_next_pc   => pc_next,
-      i_pc2_predict_next_pc   => pc_next_next,
-      i_commited_instr_tag    => i_commited_instr_tag,
-      i_jump_target           => jump_target,
-      o_commited_instr_record => commited_instr_record,
-      o_commited_instr_tag    => commited_instr_tag,
-      i_btb_instr_tag         => INSTR_TAG_NONE
-      );
-
-  mispredictor : entity work.Instruction_Misprediction
-    generic map (
-      ADDR_WIDTH => ADDR_WIDTH,
-      STEP       => STEP)
-    port map (
-      clk                            => clk,
-      rst                            => rst,
-      i_commited_instr_record        => commited_instr_record,
-      i_commited_instr_tag           => commited_instr_tag,
-      i_commited_jump_target         => jump_target,
-      o_mispredict                   => mispredicted,
-      o_mispredict_correct_pc        => mispredict_correct_pc,
-      o_wrongly_taken_branch         => mispredict_wrongly_taken_branch,
-      o_wrongly_not_taken_branch     => mispredict_wrongly_not_taken_branch,
-      o_wrongly_taken_jump           => mispredict_wrongly_taken_jump,
-      o_wrongly_not_taken_jump       => mispredict_wrongly_not_taken_jump,
-      o_wrongly_pc_disrupt           => mispredict_wrongly_pc_disrupt,
-      o_wrongly_predicted_is_branch  => mispredict_wrongly_predicted_is_branch,
-      o_wrongly_predicted_is_jump    => mispredict_wrongly_predicted_is_jump,
-      o_wrongly_predicted_is_stepped => mispredict_wrongly_predicted_is_stepped
-      );
-
-  predictor : entity work.PC_Predictor
-    generic map (
-      ADDR_WIDTH => ADDR_WIDTH,
-      STEP       => STEP)
-    port map (
-      clk                            => clk,
-      rst                            => rst,
-      stall_req                      => stall_pc,
-      o_itrack_req_pc1               => itrack_req_pc,
-      o_itrack_req_pc2               => itrack_req_pc_next,
-      -- o_itrack_pc1                   => o_itrack_pc1,
-      -- o_itrack_pc2                   => o_itrack_pc2,
-      -- o_itrack_pc1_instr_tag         => pc_instr_tag,
-      -- o_itrack_pc2_instr_tag         => pc_next_instr_tag,
-      i_commited_instr_record        => commited_instr_record,
-      i_commited_instr_tag           => commited_instr_tag,
-      i_commited_jump_target         => jump_target,
-      i_mispredict                   => mispredicted,
-      i_mispredict_correct_pc        => mispredict_correct_pc,
-      i_wrongly_taken_branch         => mispredict_wrongly_taken_branch,
-      i_wrongly_not_taken_branch     => mispredict_wrongly_not_taken_branch,
-      i_wrongly_taken_jump           => mispredict_wrongly_taken_jump,
-      i_wrongly_not_taken_jump       => mispredict_wrongly_not_taken_jump,
-      i_wrongly_predicted_is_branch  => mispredict_wrongly_predicted_is_branch,
-      i_wrongly_predicted_is_jump    => mispredict_wrongly_predicted_is_jump,
-      i_wrongly_predicted_is_stepped => mispredict_wrongly_predicted_is_stepped,
-      o_pc                           => pc,
-      o_pc_instr_tag                 => pc_instr_tag,
-      o_next_pc                      => pc_next,
-      o_next_pc_instr_tag            => pc_next_instr_tag,
-      o_next_next_pc                 => pc_next_next,
-      o_dbg_prediction               => o_dbg_prediction);
-
-  --- Outputs
-  o_current_pc           <= pc;
-  o_current_pc_instr_tag <= pc_instr_tag;
-  o_next_pc              <= pc_next;
-  o_next_pc_instr_tag    <= pc_next_instr_tag;
-  o_mispredicted         <= mispredicted;
-
-  --- Misprediction
-  --- When fetch mispredicted, signal to kill the pipeline
-  --- This is now handled by the misprediction entity
-
-end architecture rtl;
-
-architecture simple of PC_Register is
-  signal itag : instr_tag_t;
 begin
-  itag.valid <= true;
-  o_mispredicted <= jump_pc;
+  pc_addr : PC_Adder
+    generic map (
+      ADDR_WIDTH => ADDR_WIDTH,
+      STEP       => STEP)
+    port map (
+      current_pc => pc,
+      next_pc    => pc_stepped);
 
-  process(clk, rst, stall_pc, jump_pc)
-    variable pc : std_logic_vector(ADDR_WIDTH - 1 downto 0);
+  process(clk, stall_pc, jump_pc, jump_target, pc_stepped)
   begin
     if rst = '1' then
-      pc           := (others => '0');
-      o_current_pc <= pc;
-      o_next_pc    <= std_logic_vector(to_unsigned(STEP, o_next_pc'length));
-    elsif rising_edge(clk) and stall_pc = '0' then
-      if jump_pc = '1' then
-        pc           := jump_target;
-        o_current_pc <= pc;
-        o_next_pc    <= std_logic_vector(unsigned(pc) + STEP);
-      else
-        pc           := std_logic_vector(unsigned(pc) + 4);
-        o_current_pc <= pc;
-        o_next_pc    <= std_logic_vector(unsigned(pc) + 4);
+      pc <= (others => '0');
+    else
+      if stall_pc = '0' and rising_edge(clk) then
+        if jump_pc = '1' then
+          pc <= jump_target;
+        else
+          pc <= pc_stepped;
+        end if;
       end if;
-      o_current_pc_instr_tag <= itag;
-      o_next_pc_instr_tag <= itag;
     end if;
   end process;
-end architecture simple;
 
-architecture pipelined of PC_Register is
-begin
-end architecture pipelined;
+    o_current_pc <= pc;
+  end architecture simple;
+
+  architecture pipelined of PC_Register is
+  begin
+  end architecture pipelined;

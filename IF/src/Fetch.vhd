@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    :
 -- Created    : 2016-11-10
--- Last update: 2017-02-24
+-- Last update: 2018-12-04
 -- Platform   :
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -25,8 +25,6 @@ use ieee.numeric_std.all;
 
 use work.cpu_defs.all;
 use work.cache_defs.all;
-use work.instruction_defs.all;
-use work.instruction_prediction.prediction_t;
 
 entity Fetch is
 
@@ -42,10 +40,13 @@ entity Fetch is
     stall_req : in std_logic;           -- stall current instruction
     kill_req  : in std_logic;           -- kill current instruction
 
+    i_pc     : in  std_logic_vector(ADDR_WIDTH - 1 downto 0);
+    o_pc_req : out std_logic;
+
     o_pc_instr                  : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
     o_instruction               : out std_logic_vector(DATA_WIDTH - 1 downto 0);
     o_instr_tag                 : out instr_tag_t;
-    o_mispredict_kill_pipeline  : out std_logic;
+
     -- L2 connections
     o_l2c_req                   : out std_logic;
     o_l2c_we                    : out std_logic;
@@ -53,10 +54,7 @@ entity Fetch is
     i_l2c_rdata                 : in  std_logic_vector(DATA_WIDTH - 1 downto 0);
     o_l2c_wdata                 : out std_logic_vector(DATA_WIDTH - 1 downto 0);
     i_l2c_done                  : in  std_logic;
-    -- Writeback feedback signals
-    i_is_jump                   : in  std_logic;
-    i_jump_target               : in  std_logic_vector(ADDR_WIDTH - 1 downto 0);
-    i_commited_instr_tag        : in  instr_tag_t;
+
     -- Debug signals
     o_dbg_if_pc                 : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
     o_dbg_if_fetching_pc        : out std_logic_vector(ADDR_WIDTH - 1 downto 0);
@@ -83,20 +81,13 @@ begin
     elsif rising_edge(clk) then
       if kill_req = '1' then
         o_instruction     <= (others => '0');
-        o_instr_tag.valid <= false;
       elsif stall_req then
       else
-        if i_is_jump then
-          pc := unsigned(i_jump_target);
-        else
-          pc := pc + 4;
-        end if;
+        pc                := pc + 4;
         o_instruction     <= std_logic_vector(pc);
         o_pc_instr        <= std_logic_vector(pc);
-        o_instr_tag.valid <= true;
       end if;
     end if;
-    o_mispredict_kill_pipeline <= i_is_jump;
   end process fake_fetch;
 end architecture instr_is_pc;
 
@@ -132,7 +123,6 @@ architecture simple of Fetch is
   -- Outgoing to next pipeline stage instruction
   signal out_pc     : addr_t;
   signal out_data   : data_t;
-  signal out_itag   : instr_tag_t;
   signal data_valid : std_logic;
 begin
   iprovider : entity work.Instruction_Provider
@@ -142,9 +132,8 @@ begin
     port map (
       clk             => clk,
       rst             => rst,
-      kill_req        => i_is_jump,
+      kill_req        => kill_req,
       stall_req       => stall_req,
-      i_kill_addr     => i_jump_target,
       i_next_addr     => next_query_pc,
       o_addr          => fetching_pc,
       o_data          => fetching_data,
@@ -157,18 +146,18 @@ begin
       o_l2c_wdata     => o_l2c_wdata,
       i_l2c_done      => i_l2c_done);
 
-  jumper : process(rst, clk, i_is_jump, fetching_valid)
+  jumper : process(rst, clk, kill_req, fetching_valid)
   begin
     if rst = '1' then
       kill_next_valid <= false;
-    elsif rising_edge(clk) and i_is_jump = '1' then
+    elsif rising_edge(clk) and kill_req = '1' then
       kill_next_valid <= true;
     elsif rising_edge(clk) and fetching_valid = '1' then
       kill_next_valid <= false;
     end if;
   end process jumper;
 
-  provider_driver : process(rst, clk, next_query_pc_req, query_pc, i_is_jump)
+  provider_driver : process(rst, clk, next_query_pc_req, query_pc)
   begin
     --
     -- RJK: next_query_pc should be retrieved out of predict_next
@@ -183,19 +172,16 @@ begin
     if rst = '1' then
       query_pc <= std_logic_vector(to_unsigned(STEP, next_query_pc'length));
     elsif rising_edge(clk) then
-      if i_is_jump = '1' then
-        query_pc <= i_jump_target;
-      elsif next_query_pc_req = '1' then
+      if next_query_pc_req = '1' then
         query_pc        <= next_query_pc;
         predict_current <= next_query_pc;
       end if;
     end if;
   end process provider_driver;
 
-  cache_aquire : process(rst, clk, stall_req, kill_req, fetching_valid)
+  cache_aquire : process(rst, clk, stall_req, kill_req, r_kill_req, fetching_valid)
   begin
     if rst = '1' then
-      itag <= INSTR_TAG_FIRST_VALID;
     elsif rising_edge(clk) then
       r_kill_req <= kill_req;
 
@@ -204,12 +190,9 @@ begin
         stall_req = '0' then
         fetched_pc   <= fetching_pc;
         fetched_data <= fetching_data;
-        itag         <= get_next_instr_tag(itag, 1);
-        out_itag     <= get_next_instr_tag(itag, 1);
       elsif stall_req = '0' then
         fetched_pc   <= (others => 'X');
         fetched_data <= nop_instruction;
-        out_itag     <= INSTR_TAG_NONE;
       end if;
     end if;
   end process cache_aquire;
@@ -217,10 +200,9 @@ begin
   out_pc   <= fetched_pc;
   out_data <= fetched_data;
 
-  o_pc_instr                 <= out_pc;
-  o_instruction              <= out_data;
-  o_instr_tag                <= out_itag;
-  o_mispredict_kill_pipeline <= i_is_jump;
+  o_pc_req      <= next_query_pc_req;
+  o_pc_instr    <= out_pc;
+  o_instruction <= out_data;
 
   o_dbg_if_pc                 <= fetched_pc;
   o_dbg_if_fetching_pc        <= fetching_pc;
