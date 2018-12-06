@@ -6,7 +6,7 @@
 -- Author     : Robert Jarzmik  <robert.jarzmik@free.fr>
 -- Company    : 
 -- Created    : 2016-11-13
--- Last update: 2018-12-04
+-- Last update: 2018-12-05
 -- Platform   : 
 -- Standard   : VHDL'93/02
 -------------------------------------------------------------------------------
@@ -75,7 +75,7 @@ begin
   process(clk, stall_pc, jump_pc, jump_target, pc_stepped)
   begin
     if rst = '1' then
-      pc <= (others => '0');
+      pc <= std_logic_vector(to_signed(-STEP, pc'length));
     else
       if stall_pc = '0' and rising_edge(clk) then
         if jump_pc = '1' then
@@ -87,9 +87,9 @@ begin
     end if;
   end process;
 
-    o_current_pc <= pc;
-  end architecture simple;
+  o_current_pc <= pc;
+end architecture simple;
 
-  architecture pipelined of PC_Register is
-  begin
-  end architecture pipelined;
+architecture pipelined of PC_Register is
+begin
+end architecture pipelined;

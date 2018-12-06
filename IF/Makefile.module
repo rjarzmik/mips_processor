@@ -2,6 +2,6 @@ MODULE := IF
 DEPENDENCIES := Caches CPU_Definitions ProgramCounter rjarzmik
 PACKAGE := work
 SRCS := src/*.vhd test/src/*.vhd
-MODULE_TESTBENCHES := Fetch_tb
+MODULE_TESTBENCHES := fetch_tb
 
 $(eval $(call DEFINE_MODULE,$(MODULE),$(PACKAGE),$(SRCS),$(MODULE_TESTBENCHES),$(DEPENDENCIES)))
